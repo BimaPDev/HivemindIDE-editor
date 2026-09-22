@@ -27,6 +27,7 @@ const definitions: readonly IAgentServerToolDefinition[] = [
 			required: ['enabled'],
 		},
 		annotations: { readOnlyHint: false },
+		deferLoading: true,
 	},
 	{
 		name: readAgentMergeCIToolName,
@@ -48,6 +49,7 @@ const definitions: readonly IAgentServerToolDefinition[] = [
 			},
 		},
 		annotations: { readOnlyHint: true },
+		deferLoading: true,
 	},
 	{
 		name: replyToAgentMergeReviewThreadToolName,
@@ -63,6 +65,7 @@ const definitions: readonly IAgentServerToolDefinition[] = [
 			required: ['threadId', 'body'],
 		},
 		annotations: { readOnlyHint: false },
+		deferLoading: true,
 	},
 	{
 		name: rerunAgentMergeWorkflowToolName,
@@ -77,6 +80,7 @@ const definitions: readonly IAgentServerToolDefinition[] = [
 			required: ['runId'],
 		},
 		annotations: { readOnlyHint: false },
+		deferLoading: true,
 	},
 ];
 
