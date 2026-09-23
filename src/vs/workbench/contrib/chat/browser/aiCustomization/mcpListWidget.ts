@@ -72,7 +72,7 @@ const $ = DOM.$;
 
 const PLUGIN_COLLECTION_PREFIX = MCP_PLUGIN_COLLECTION_ID_PREFIX;
 const MCP_INSTALLED_ITEM_HEIGHT = 44;
-const MCP_INSTALLED_ITEM_HEIGHT_WITH_SOURCE_AND_DESCRIPTION = 58;
+const MCP_INSTALLED_ITEM_HEIGHT_WITH_ISSUE = 76;
 const MCP_MARKETPLACE_ITEM_HEIGHT = 66;
 
 const COPILOT_EXTENSION_IDS = ['github.copilot', 'github.copilot-chat'];
@@ -189,12 +189,13 @@ export function getToggledMcpEnablementState(state: ContributionEnablementState)
 interface IMcpServerItemTemplateData {
 	readonly container: HTMLElement;
 	readonly name: HTMLElement;
-	readonly compatibilityBadge: HTMLElement;
-	readonly statusBadge: HTMLElement;
+	readonly compatibilityMessage: HTMLElement;
 	readonly sourcePath: HTMLElement;
 	readonly sourcePathHover: IManagedHover;
 	readonly description: HTMLElement;
 	readonly descriptionHover: IManagedHover;
+	readonly issue: HTMLElement;
+	readonly issueHover: IManagedHover;
 	readonly actions: HTMLElement;
 	readonly templateDisposables: DisposableStore;
 	readonly elementDisposables: DisposableStore;
@@ -242,27 +243,27 @@ export class McpServerItemRenderer extends Disposable implements IListRenderer<I
 		const details = DOM.append(container, $('.mcp-server-details'));
 		const nameRow = DOM.append(details, $('.mcp-server-name-row'));
 		const name = DOM.append(nameRow, $('.mcp-server-name'));
-		const compatibilityBadge = DOM.append(nameRow, $('.plugin-list-item-status.mcp-compatibility-status-badge'));
-		compatibilityBadge.setAttribute('aria-hidden', 'true');
-		const statusBadge = DOM.append(nameRow, $('.plugin-list-item-status.mcp-runtime-status-badge'));
-		statusBadge.setAttribute('aria-hidden', 'true');
+		const compatibilityMessage = DOM.append(details, $('.mcp-server-compatibility-message'));
 
 		const sourcePath = DOM.append(details, $('a.mcp-server-source-path'));
 		const sourcePathHover = templateDisposables.add(this.hoverService.setupManagedHover(getDefaultHoverDelegate('element'), sourcePath, ''));
 		const description = DOM.append(details, $('.mcp-server-description'));
 		const descriptionHover = templateDisposables.add(this.hoverService.setupManagedHover(getDefaultHoverDelegate('element'), description, ''));
+		const issue = DOM.append(details, $('.mcp-server-issue'));
+		const issueHover = templateDisposables.add(this.hoverService.setupManagedHover(getDefaultHoverDelegate('element'), issue, ''));
 
 		const actions = DOM.append(container, $('.mcp-server-actions'));
 
 		const template: IMcpServerItemTemplateData = {
 			container,
 			name,
-			compatibilityBadge,
-			statusBadge,
+			compatibilityMessage,
 			sourcePath,
 			sourcePathHover,
 			description,
 			descriptionHover,
+			issue,
+			issueHover,
 			actions,
 			templateDisposables,
 			elementDisposables: new DisposableStore(),
@@ -425,19 +426,18 @@ export class McpServerItemRenderer extends Disposable implements IListRenderer<I
 
 	private updateStatus(templateData: IMcpServerItemTemplateData, element: IMcpInstalledEntry, currentEntry: IMcpInstalledEntry | undefined, state: McpStatusKind | undefined, compatibilityKind: CustomizationMcpServerCompatibilityKind | undefined, disabledReason?: CustomizationDisabledReason): void {
 		const isError = state === McpServerStatus.Error || state === McpConnectionState.Kind.Error;
-		updateMcpCompatibilityBadge(templateData.compatibilityBadge, compatibilityKind);
+		updateMcpCompatibilityMessage(templateData.compatibilityMessage, compatibilityKind);
+		if (isError) {
+			templateData.compatibilityMessage.style.display = 'none';
+		}
 
 		const presentation = getMcpStatusPresentation(state, disabledReason);
-		templateData.statusBadge.className = 'plugin-list-item-status mcp-runtime-status-badge';
-		if (presentation) {
-			templateData.statusBadge.textContent = presentation.label;
-			templateData.statusBadge.classList.add(presentation.className);
-			templateData.statusBadge.style.display = '';
-		} else {
-			templateData.statusBadge.textContent = '';
-			templateData.statusBadge.style.display = 'none';
-		}
 		const activeSessionServer = currentEntry && getActiveSessionServer(currentEntry);
+		const issue = isError ? getMcpEntryErrorMessage(currentEntry ?? element) : undefined;
+		templateData.issue.textContent = issue ?? '';
+		templateData.issue.style.display = issue ? '' : 'none';
+		templateData.issueHover.update(issue ?? '');
+		templateData.description.style.display = issue || (compatibilityKind && compatibilityKind !== 'supported') ? 'none' : templateData.description.textContent ? '' : 'none';
 		const label = getMcpEntryLabel(currentEntry ?? element);
 		const activeSessionResource = this.customizationHarnessService.activeSessionResource.get();
 		const localServer = element.type === 'session-server-item' ? undefined : element.localServer;
@@ -450,6 +450,7 @@ export class McpServerItemRenderer extends Disposable implements IListRenderer<I
 			statusLabel: presentation?.label,
 			statusClassName: presentation?.className,
 			statusIconId: presentation?.icon?.id,
+			compatibilityKind,
 			activeSessionServerId: activeSessionServer?.id,
 			logOutputChannelId: activeSessionServer?.logOutputChannelId,
 			localServerId: localServer?.definition.id,
@@ -486,7 +487,14 @@ export class McpServerItemRenderer extends Disposable implements IListRenderer<I
 			});
 		}
 
-		if (!presentation.icon || isError) {
+		if (!presentation?.icon) {
+			const compatibility = getMcpCompatibilityPresentation(compatibilityKind);
+			if (compatibility) {
+				const icon = DOM.append(templateData.actions, $('.mcp-server-status.mcp-server-state-icon'));
+				updateMcpCompatibilityIcon(icon, compatibilityKind, undefined);
+				icon.setAttribute('aria-hidden', 'true');
+				templateData.actionDisposables.add(this.hoverService.setupManagedHover(getDefaultHoverDelegate('element'), icon, compatibility.label));
+			}
 			this._renderManagementActions(getEntry, templateData.actions, templateData.actionDisposables, () => this.updateActionsTabbability(templateData));
 			this.updateActionsTabbability(templateData);
 			return;
@@ -530,6 +538,8 @@ export class McpServerItemRenderer extends Disposable implements IListRenderer<I
 		templateData.sourcePath.textContent = '';
 		templateData.descriptionHover.hide();
 		templateData.descriptionHover.update('');
+		templateData.issueHover.hide();
+		templateData.issueHover.update('');
 		templateData.description.textContent = '';
 		templateData.currentElement = undefined;
 		templateData.currentIndex = -1;
@@ -685,14 +695,24 @@ export function getMcpCompatibilityPresentation(kind: CustomizationMcpServerComp
 	}
 }
 
-export function updateMcpCompatibilityBadge(badge: HTMLElement, kind: CustomizationMcpServerCompatibilityKind | undefined): void {
+export function updateMcpCompatibilityMessage(message: HTMLElement, kind: CustomizationMcpServerCompatibilityKind | undefined): void {
 	const presentation = getMcpCompatibilityPresentation(kind);
-	badge.className = 'plugin-list-item-status mcp-compatibility-status-badge';
-	badge.style.display = presentation ? '' : 'none';
-	badge.textContent = presentation?.label ?? '';
+	message.className = 'mcp-server-compatibility-message';
+	message.style.display = presentation ? '' : 'none';
+	message.textContent = presentation ? localize('mcpCompatibilityMigrationHint', "{0}. See Migrations for details.", presentation.label) : '';
 	if (presentation) {
-		badge.classList.add(presentation.className);
+		message.classList.add(presentation.className);
 	}
+}
+
+function updateMcpCompatibilityIcon(icon: HTMLElement, kind: CustomizationMcpServerCompatibilityKind | undefined, runtimeIcon: ThemeIcon | undefined): void {
+	const compatibility = getMcpCompatibilityPresentation(kind);
+	if (runtimeIcon || !compatibility) {
+		return;
+	}
+	icon.className = `mcp-server-state-icon ${ThemeIcon.asClassNameArray(Codicon.error).join(' ')} compatibility`;
+	icon.style.display = '';
+	icon.setAttribute('aria-label', compatibility.label);
 }
 
 export function getMcpStatusPresentation(state: McpStatusKind | undefined, disabledReason?: CustomizationDisabledReason): IMcpStatusPresentation | undefined {
@@ -700,25 +720,34 @@ export function getMcpStatusPresentation(state: McpStatusKind | undefined, disab
 		return undefined;
 	}
 	if (state === 'disabled') {
-		return { label: getCustomizationDisabledLabel(disabledReason), className: 'disabled', icon: Codicon.circleSlash };
+		return { label: getCustomizationDisabledLabel(disabledReason), className: 'disabled' };
 	}
 	switch (state) {
 		case McpConnectionState.Kind.Running:
 		case McpServerStatus.Ready:
-			return { label: localize('running', "Running"), className: 'running', icon: Codicon.check };
+			return { label: localize('running', "Running"), className: 'running' };
 		case McpConnectionState.Kind.Starting:
 		case McpServerStatus.Starting:
 			return { label: localize('starting', "Starting"), className: 'starting', icon: ThemeIcon.modify(Codicon.loading, 'spin') };
 		case McpServerStatus.AuthRequired:
-			return { label: localize('authRequired', "Authentication required"), className: 'auth-required', icon: Codicon.account };
+			return { label: localize('authRequired', "Authentication required"), className: 'auth-required' };
 		case McpConnectionState.Kind.Error:
 		case McpServerStatus.Error:
 			return { label: localize('error', "Error"), className: 'error', icon: Codicon.error };
 		case McpConnectionState.Kind.Stopped:
 		case McpServerStatus.Stopped:
 		default:
-			return { label: localize('stopped', "Stopped"), className: 'stopped' };
+			return { label: localize('stopped', "Stopped"), className: 'stopped', icon: Codicon.circleSlash };
 	}
+}
+
+function getMcpEntryErrorMessage(entry: IMcpInstalledEntry): string | undefined {
+	const activeSessionServer = getActiveSessionServer(entry);
+	if (activeSessionServer) {
+		return getMcpErrorMessage(activeSessionServer.status, activeSessionServer.state?.kind === McpServerStatus.Error ? activeSessionServer.state.error?.message : undefined);
+	}
+	const connectionState = entry.type === 'session-server-item' ? undefined : entry.localServer?.connectionState.get();
+	return getMcpErrorMessage(connectionState?.state, connectionState?.state === McpConnectionState.Kind.Error ? connectionState.message : undefined);
 }
 
 function getMcpErrorMessage(state: McpStatusKind | undefined, message: string | undefined): string | undefined {
@@ -768,6 +797,7 @@ export interface IMcpStatusRenderInput {
 	readonly statusLabel: string | undefined;
 	readonly statusClassName: string | undefined;
 	readonly statusIconId: string | undefined;
+	readonly compatibilityKind?: CustomizationMcpServerCompatibilityKind;
 	/** The active-session twin the sign-in and management actions are bound to. */
 	readonly activeSessionServerId: string | undefined;
 	readonly logOutputChannelId: string | undefined;
@@ -793,6 +823,7 @@ export function getMcpStatusRenderSignature(input: IMcpStatusRenderInput): strin
 		input.statusLabel ?? null,
 		input.statusClassName ?? null,
 		input.statusIconId ?? null,
+		input.compatibilityKind ?? null,
 		input.activeSessionServerId ?? null,
 		input.logOutputChannelId ?? null,
 		input.localServerId ?? null,
@@ -880,8 +911,9 @@ function getMcpStatusKind(entry: IMcpServerItemEntry | IMcpSessionServerItemEntr
 	if (entry.localServer && isContributionDisabled(entry.localServer.enablement.get())) {
 		return 'disabled';
 	}
-	if (entry.type === 'server-item' && !isSessionsWindow) {
-		return entry.localServer?.connectionState.get().state;
+	if (!isSessionsWindow) {
+		const state = entry.localServer?.connectionState.get().state;
+		return entry.type === 'server-item' || state === McpConnectionState.Kind.Error ? state : undefined;
 	}
 	return undefined;
 }
@@ -947,23 +979,27 @@ export function getActiveSessionServerPresentation(server: AgentHostMcpServer): 
 }
 
 export function updateMcpCardRuntimePresentation(
-	statusBadge: HTMLElement,
+	statusIcon: HTMLElement,
 	primaryAction: HTMLElement,
 	description: HTMLElement,
 	statusKind: McpStatusKind | undefined,
 	disabledReason: CustomizationDisabledReason | undefined,
 	ariaLabel: string,
 	descriptionText: string,
+	errorMessage?: string,
 ): void {
 	const statusPresentation = getMcpStatusPresentation(statusKind, disabledReason);
-	statusBadge.className = 'plugin-list-item-status mcp-runtime-status-badge';
-	statusBadge.style.display = statusPresentation ? '' : 'none';
-	statusBadge.textContent = statusPresentation?.label ?? '';
-	if (statusPresentation) {
-		statusBadge.classList.add(statusPresentation.className);
+	statusIcon.className = 'mcp-server-state-icon';
+	statusIcon.style.display = statusPresentation?.icon ? '' : 'none';
+	if (statusPresentation?.icon) {
+		statusIcon.classList.add(statusPresentation.className, ...ThemeIcon.asClassNameArray(statusPresentation.icon));
+		statusIcon.setAttribute('aria-label', statusPresentation.label);
+	} else {
+		statusIcon.removeAttribute('aria-label');
 	}
 	primaryAction.setAttribute('aria-label', ariaLabel);
-	description.textContent = descriptionText;
+	description.textContent = errorMessage ?? descriptionText;
+	description.classList.toggle('mcp-server-error-message', errorMessage !== undefined);
 }
 
 export function shouldLoadMcpGallerySnapshot(visible: boolean, query: string, itemCount: number, failed: boolean, loading: boolean, accessEnabled: boolean): boolean {
@@ -1826,11 +1862,7 @@ export class McpListWidget extends Disposable {
 
 	private createMcpSectionList(container: HTMLElement, label: string, entries: readonly IMcpSectionEntry[]): void {
 		const key = container.dataset.virtualizedSectionKey ?? label;
-		const delegate = new McpSectionDelegate(entry => {
-			const description = entry.type === 'server-item' ? entry.server.description?.trim() : entry.type === 'builtin-item' ? entry.description : undefined;
-			const source = getMcpEntrySource(entry, this.labelService, this.agentPluginService, this.extensionsWorkbenchService);
-			return description && source ? MCP_INSTALLED_ITEM_HEIGHT_WITH_SOURCE_AND_DESCRIPTION : MCP_INSTALLED_ITEM_HEIGHT;
-		});
+		const delegate = new McpSectionDelegate(() => MCP_INSTALLED_ITEM_HEIGHT_WITH_ISSUE);
 		container.style.height = `${entries.length > 0 ? delegate.getHeight(entries[0]) : MCP_INSTALLED_ITEM_HEIGHT}px`;
 		container.classList.add('virtualized-section-list');
 		this.cardListControllers.get(container)?.dispose();
@@ -2136,13 +2168,13 @@ export class McpListWidget extends Disposable {
 		const name = DOM.append(nameRow, $('.plugin-list-item-name'));
 		name.textContent = formatDisplayName(label);
 		name.title = label;
-		const compatibilityBadge = DOM.append(nameRow, $('.plugin-list-item-status.mcp-compatibility-status-badge'));
-		const statusBadge = DOM.append(nameRow, $('.plugin-list-item-status.mcp-runtime-status-badge'));
+		const compatibilityMessage = DOM.append(details, $('.mcp-server-compatibility-message'));
 		const description = DOM.append(details, $('.plugin-list-item-description'));
 
 		const actions = DOM.append(row, $('.plugin-list-item-action'));
 		const getEntry = () => entry;
 		const signIn = this.appendInstalledServerSignIn(actions, getEntry);
+		const statusIcon = DOM.append(actions, $('span.mcp-server-state-icon'));
 		const toggle = this.appendInstalledServerToggle(actions, getEntry);
 		const more = this.cardDisposables.add(new Button(actions, { ...getButtonStyles({ buttonSecondaryBackground: undefined, buttonSecondaryBorder: undefined }), secondary: true, supportIcons: true, ariaLabel: localize('mcpMoreActionsAria', "More actions for {0}", label) }));
 		more.element.classList.add('plugin-card-icon-button');
@@ -2161,16 +2193,18 @@ export class McpListWidget extends Disposable {
 				entry.localServer?.connectionState.read(reader);
 			}
 			const compatibilityKind = this.getMcpServerCompatibilityKind(entry, reader);
-			updateMcpCompatibilityBadge(compatibilityBadge, compatibilityKind);
+			updateMcpCompatibilityMessage(compatibilityMessage, compatibilityKind);
 			updateMcpCardRuntimePresentation(
-				statusBadge,
+				statusIcon,
 				primaryAction,
 				description,
 				getMcpStatusKind(entry, this.workspaceService.isSessionsWindow),
 				getMcpDisabledReason(entry),
 				getMcpEntryAriaLabel(entry, this.workspaceService.isSessionsWindow, compatibilityKind, this.labelService, this.agentPluginService, this.extensionsWorkbenchService),
 				this.getInstalledEntryDescription(entry),
+				getMcpEntryErrorMessage(entry),
 			);
+			updateMcpCompatibilityIcon(statusIcon, compatibilityKind, getMcpStatusPresentation(getMcpStatusKind(entry, this.workspaceService.isSessionsWindow))?.icon);
 		}));
 		this.cardDisposables.add(this.agentHostCustomizationService.onDidChangeCustomizations(() => {
 			const updated = this.installedEntries.find(candidate => getMcpRowKey(candidate.entry) === rowKey)?.entry;
@@ -2179,16 +2213,18 @@ export class McpListWidget extends Disposable {
 			}
 			entry = updated;
 			const compatibilityKind = this.getMcpServerCompatibilityKind(entry);
-			updateMcpCompatibilityBadge(compatibilityBadge, compatibilityKind);
+			updateMcpCompatibilityMessage(compatibilityMessage, compatibilityKind);
 			updateMcpCardRuntimePresentation(
-				statusBadge,
+				statusIcon,
 				primaryAction,
 				description,
 				getMcpStatusKind(entry, this.workspaceService.isSessionsWindow),
 				getMcpDisabledReason(entry),
 				getMcpEntryAriaLabel(entry, this.workspaceService.isSessionsWindow, compatibilityKind, this.labelService, this.agentPluginService, this.extensionsWorkbenchService),
 				this.getInstalledEntryDescription(entry),
+				getMcpEntryErrorMessage(entry),
 			);
+			updateMcpCompatibilityIcon(statusIcon, compatibilityKind, getMcpStatusPresentation(getMcpStatusKind(entry, this.workspaceService.isSessionsWindow))?.icon);
 			signIn?.update();
 			toggle.update();
 			row.classList.toggle('disabled', !this.isInstalledEntryEnabled(entry));
