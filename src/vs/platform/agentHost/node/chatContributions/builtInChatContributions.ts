@@ -6,6 +6,7 @@
 import { DisposableStore, type IDisposable } from '../../../../base/common/lifecycle.js';
 import { IAgentHostChatContributions } from '../../common/agentHostChatContributionsService.js';
 import { ArtifactToolsContribution } from './artifactTools/artifactToolsContribution.js';
+import { ArtifactRunsContribution } from './artifactRuns/artifactRunsContribution.js';
 import { ChatDraftContribution } from './chatDraft/chatDraftContribution.js';
 import { ChatSurfaceContribution } from './chatSurface/chatSurfaceContribution.js';
 import { CheckpointAndChangesetContribution } from './checkpointAndChangeset/checkpointAndChangesetContribution.js';
@@ -46,6 +47,7 @@ export function registerBuiltInChatContributions(
 	registrations.add(contributions.registerContribution(ChatDraftContribution));
 	registrations.add(contributions.registerContribution(MarkdownPlanRichLinksContribution));
 	registrations.add(contributions.registerContribution(ArtifactToolsContribution));
+	registrations.add(contributions.registerContribution(ArtifactRunsContribution));
 	registrations.add(contributions.registerContribution(ChatSurfaceContribution));
 	registrations.add(contributions.registerContribution(SideChatContribution));
 	registrations.add(contributions.registerContribution(SessionFlagsContribution));

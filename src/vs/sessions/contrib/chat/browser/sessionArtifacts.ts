@@ -6,10 +6,10 @@
 import { Codicon } from '../../../../base/common/codicons.js';
 import { Event } from '../../../../base/common/event.js';
 import { MarkdownString } from '../../../../base/common/htmlContent.js';
-import { Disposable } from '../../../../base/common/lifecycle.js';
+import { Disposable, DisposableMap, DisposableStore } from '../../../../base/common/lifecycle.js';
 import { getMediaMime } from '../../../../base/common/mime.js';
 import { matchesSomeScheme, Schemas } from '../../../../base/common/network.js';
-import { derived, IObservable, IReader, observableSignalFromEvent } from '../../../../base/common/observable.js';
+import { autorun, derived, IObservable, IReader, observableSignalFromEvent, observableValue } from '../../../../base/common/observable.js';
 import { basename, getComparisonKey } from '../../../../base/common/resources.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
 import { URI } from '../../../../base/common/uri.js';
@@ -22,6 +22,8 @@ import { IClipboardService } from '../../../../platform/clipboard/common/clipboa
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { ILabelService } from '../../../../platform/label/common/label.js';
+import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
+import { ILogService } from '../../../../platform/log/common/log.js';
 import { observableConfigValue } from '../../../../platform/observable/common/platformObservableUtils.js';
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
@@ -31,7 +33,8 @@ import { openChatTurnFile, previewKind } from '../../../../workbench/contrib/cha
 import { ChatConfiguration } from '../../../../workbench/contrib/chat/common/constants.js';
 import type { IImageCarouselCollection } from '../../../../workbench/contrib/imageCarousel/browser/imageCarouselTypes.js';
 import { linkKey } from '../../../common/sessionLinks.js';
-import { getGitHubPullRequestRefs, SessionArtifactKind, type ISessionArtifact } from '../../../services/sessions/common/session.js';
+import { getGitHubPullRequestRefs, SessionArtifactKind, type IChat, type ISessionArtifact } from '../../../services/sessions/common/session.js';
+import { ArtifactIntegrationPresentation } from './artifactIntegrationPresentation.js';
 import { ISessionsManagementService, type IActiveSession } from '../../../services/sessions/common/sessionsManagement.js';
 import { parseGitHubPullRequestUrl } from '../../github/common/utils.js';
 import { toErrorMessage } from '../../../../base/common/errorMessage.js';
@@ -319,6 +322,7 @@ export class SessionArtifacts extends Disposable {
 		session: IObservable<IActiveSession | undefined>,
 		/** The URLs the browsers pill lists; website entries for them are left out. */
 		private readonly _browserUrls: IObservable<ReadonlySet<string>>,
+		chat: IObservable<IChat | undefined>,
 		@IClipboardService private readonly _clipboardService: IClipboardService,
 		@ICommandService private readonly _commandService: ICommandService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
@@ -327,8 +331,69 @@ export class SessionArtifacts extends Disposable {
 		@IOpenerService private readonly _openerService: IOpenerService,
 		@ISessionsManagementService private readonly _sessionsManagementService: ISessionsManagementService,
 		@IWorkspaceContextService workspaceContextService: IWorkspaceContextService,
+		@IInstantiationService instantiationService: IInstantiationService,
+		@ILogService logService: ILogService,
 	) {
 		super();
+
+		const lifetimes = this._register(new DisposableMap<string, DisposableStore>());
+		const presentations = observableValue<ReadonlyMap<string, ArtifactIntegrationPresentation>>(this, new Map());
+		const sessionChanges = observableSignalFromEvent(this, this._sessionsManagementService.onDidChangeSessions);
+		let owner: IActiveSession | undefined;
+		this._register(autorun(reader => {
+			const current = session.read(reader);
+			if (current !== owner) {
+				lifetimes.clearAndDisposeAll();
+				presentations.set(new Map(), undefined);
+				owner = current;
+			}
+			const artifacts = current?.artifacts?.read(reader) ?? [];
+			const ids = new Set(artifacts.map(artifact => artifact.id));
+			for (const id of lifetimes.keys()) {
+				if (!ids.has(id)) {
+					lifetimes.deleteAndDispose(id);
+					const next = new Map(presentations.get());
+					next.delete(id);
+					presentations.set(next, undefined);
+				}
+			}
+			if (!current) {
+				return;
+			}
+			if (!current.capabilities.read(reader).supportsArtifactIntegrations) {
+				return;
+			}
+			sessionChanges.read(reader);
+			for (const artifact of artifacts) {
+				if (lifetimes.has(artifact.id) || (!artifact.link && !artifact.uri)) {
+					continue;
+				}
+				const lifetime = new DisposableStore();
+				lifetimes.set(artifact.id, lifetime);
+				void this._sessionsManagementService.acquireArtifactIntegration(current, artifact.id).then(reference => {
+					if (!reference) {
+						return;
+					}
+					lifetime.add(reference);
+					if (lifetime.isDisposed) {
+						return;
+					}
+					const presentation = lifetime.add(instantiationService.createInstance(ArtifactIntegrationPresentation, reference.object, () => {
+						const invokingChat = chat.get();
+						if (!invokingChat || session.get() !== current) {
+							throw new Error(localize('artifactInvokingChatUnavailable', "The chat that invoked this artifact action is no longer available."));
+						}
+						return invokingChat.resource.toString();
+					}));
+					presentations.set(new Map(presentations.get()).set(artifact.id, presentation), undefined);
+				}).catch(error => {
+					if (!lifetime.isDisposed) {
+						logService.error('[ArtifactIntegrations] Could not acquire artifact presentation', error);
+						lifetimes.deleteAndDispose(artifact.id);
+					}
+				});
+			}
+		}));
 
 		const imageCarouselEnabled = observableConfigValue<boolean>(ChatConfiguration.ImageCarouselEnabled, true, this._configurationService);
 		// Rebuild after formatter/folder changes because the session folder mounts after activation.
@@ -345,13 +410,14 @@ export class SessionArtifacts extends Disposable {
 				...getGitHubPullRequestRefs(gitHubInfo),
 				...(gitHubInfo?.issues ?? []),
 			].map(ref => linkKey(ref.uri.toString())));
+			const integrated = presentations.read(reader);
 			return buildSessionArtifactSections(
 				(current.artifacts?.read(reader) ?? []).filter(artifact => artifact.isArtifact === isArtifact && !isShownInGitHub(artifact, surfacedLinks)),
 				this._actions(current, reader),
 				this._labelService,
 				imageCarouselEnabled.read(reader),
 				this._browserUrls.read(reader),
-			);
+			).map(section => ({ ...section, entries: section.entries.map(entry => integrated.get(entry.id)?.decorate(entry, reader) ?? entry) }));
 		});
 
 		this.sections = sectionsFor(true);

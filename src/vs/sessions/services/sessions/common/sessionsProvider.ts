@@ -5,7 +5,8 @@
 
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { Event } from '../../../../base/common/event.js';
-import { IDisposable } from '../../../../base/common/lifecycle.js';
+import { IDisposable, IReference } from '../../../../base/common/lifecycle.js';
+import { IArtifactModel } from '../../../../platform/artifactIntegrations/common/artifactIntegration.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
 import { URI } from '../../../../base/common/uri.js';
 import { IChatRequestVariableEntry } from '../../../../workbench/contrib/chat/common/attachments/chatVariableEntries.js';
@@ -374,6 +375,7 @@ export interface ISessionsProvider {
 
 	/** Remove a recorded artifact without changing independent session associations. */
 	removeSessionArtifact?(sessionId: string, artifactId: string): Promise<void>;
+	acquireArtifactIntegration?(sessionId: string, artifactId: string): Promise<IReference<IArtifactModel>>;
 
 	/**
 	 * Get selectable models and the current resolution of `desiredModelId`.
