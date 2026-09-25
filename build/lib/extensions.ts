@@ -312,11 +312,11 @@ export function fromGithub({ name, version, repo, sha256, metadata }: IExtension
  */
 const nativeExtensions = [
 	'git',
-	'microsoft-authentication',
 ];
 
 const excludedExtensions = [
 	'copilot',
+	'microsoft-authentication',
 	'vscode-api-tests',
 	'vscode-colorize-tests',
 	'vscode-colorize-perf-tests',

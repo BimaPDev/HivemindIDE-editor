@@ -1,0 +1,348 @@
+/*---------------------------------------------------------------------------------------------
+ *  Agent detail editor — matches the run inspector layout (rail + main).
+ *--------------------------------------------------------------------------------------------*/
+
+.monaco-workbench .hivemindide-agent-detail-sidebar {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	overflow: auto;
+}
+
+.monaco-workbench .hivemindide-agent-detail-back {
+	align-self: flex-start;
+	margin: 10px 12px 0;
+	padding: 4px 8px;
+	font-size: 12px;
+	background: transparent;
+	color: var(--vscode-textLink-foreground);
+	border: none;
+	cursor: pointer;
+	font-family: inherit;
+}
+
+.monaco-workbench .hivemindide-agent-detail-back:hover {
+	text-decoration: underline;
+}
+
+.monaco-workbench .hivemindide-agent-detail-sidebar .hivemindide-agent-detail-layout {
+	grid-template-columns: 1fr;
+}
+
+.monaco-workbench .hivemindide-agent-detail-sidebar .hivemindide-agent-detail-rail {
+	border-right: none;
+	border-bottom: 1px solid var(--vscode-panel-border, var(--vscode-widget-border));
+	padding: 12px 14px 16px;
+}
+
+.monaco-workbench .hivemindide-agent-detail-sidebar .hivemindide-agent-detail-main {
+	padding: 16px 14px 28px;
+	max-width: none;
+}
+
+.monaco-workbench .hivemindide-agent-detail-sidebar .hivemindide-agent-detail-meta-row {
+	grid-template-columns: 72px 1fr;
+}
+
+.monaco-workbench .hivemindide-agent-detail-sidebar .hivemindide-agent-detail-stepper {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 8px 12px;
+	margin: 14px 0 16px;
+}
+
+.monaco-workbench .hivemindide-agent-detail-layout {
+	display: grid;
+	grid-template-columns: minmax(200px, 260px) 1fr;
+	min-height: 100%;
+	align-items: stretch;
+}
+
+@media (max-width: 720px) {
+	.monaco-workbench .hivemindide-agent-detail-layout {
+		grid-template-columns: 1fr;
+	}
+}
+
+.monaco-workbench .hivemindide-agent-detail-rail {
+	padding: 20px 18px 28px;
+	border-right: 1px solid var(--vscode-panel-border, var(--vscode-widget-border));
+	background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+}
+
+.monaco-workbench .hivemindide-agent-detail-stage-title {
+	font-size: 15px;
+	font-weight: 600;
+}
+
+.monaco-workbench .hivemindide-agent-detail-stage-sub {
+	margin-top: 2px;
+	font-size: 12px;
+	opacity: 0.7;
+}
+
+.monaco-workbench .hivemindide-agent-detail-stepper {
+	margin: 18px 0 22px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.monaco-workbench .hivemindide-agent-detail-step {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	font-size: 12px;
+	opacity: 0.55;
+}
+
+.monaco-workbench .hivemindide-agent-detail-step.done {
+	opacity: 0.8;
+}
+
+.monaco-workbench .hivemindide-agent-detail-step.current {
+	opacity: 1;
+	font-weight: 600;
+}
+
+.monaco-workbench .hivemindide-agent-detail-step-dot {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	border: 1.5px solid var(--vscode-foreground);
+	opacity: 0.45;
+	flex-shrink: 0;
+}
+
+.monaco-workbench .hivemindide-agent-detail-step-dot.filled {
+	background: var(--vscode-foreground);
+	opacity: 1;
+}
+
+.monaco-workbench .hivemindide-agent-detail-meta {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.monaco-workbench .hivemindide-agent-detail-meta-row {
+	display: grid;
+	grid-template-columns: 88px 1fr;
+	gap: 8px;
+	font-size: 12px;
+}
+
+.monaco-workbench .hivemindide-agent-detail-meta-key {
+	opacity: 0.55;
+}
+
+.monaco-workbench .hivemindide-agent-detail-meta-val.mono {
+	font-family: var(--monaco-monospace-font);
+	font-size: 11px;
+}
+
+.monaco-workbench .hivemindide-agent-detail-main {
+	padding: 22px 28px 36px;
+	max-width: 920px;
+}
+
+.monaco-workbench .hivemindide-agent-detail-header {
+	margin-bottom: 18px;
+}
+
+.monaco-workbench .hivemindide-agent-detail-badge {
+	display: inline-block;
+	font-size: 18px;
+	font-weight: 700;
+	color: var(--vscode-textPreformat-foreground, #f38ba8);
+	letter-spacing: 0.01em;
+}
+
+.monaco-workbench .hivemindide-agent-detail-subtitle {
+	margin-top: 4px;
+	font-size: 13px;
+	opacity: 0.7;
+}
+
+.monaco-workbench .hivemindide-agent-detail-activity {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	margin-bottom: 22px;
+}
+
+.monaco-workbench .hivemindide-agent-detail-spawned {
+	margin-bottom: 22px;
+}
+
+.monaco-workbench .hivemindide-agent-detail-spawned-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 10px;
+	width: 100%;
+	padding: 8px 10px;
+	margin-bottom: 6px;
+	text-align: left;
+	font-family: inherit;
+	font-size: 12px;
+	color: inherit;
+	background: var(--vscode-sideBar-background, transparent);
+	border: 1px solid var(--vscode-panel-border, var(--vscode-widget-border));
+	border-radius: 6px;
+	cursor: pointer;
+}
+
+.monaco-workbench .hivemindide-agent-detail-spawned-row:hover {
+	border-color: var(--vscode-focusBorder, var(--vscode-textLink-foreground));
+}
+
+.monaco-workbench .hivemindide-agent-detail-spawned-row .left {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.monaco-workbench .hivemindide-agent-detail-spawned-row .owner {
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--vscode-textLink-foreground);
+}
+
+.monaco-workbench .hivemindide-agent-detail-spawned-row .name {
+	font-weight: 600;
+}
+
+.monaco-workbench .hivemindide-agent-detail-spawned-row .meta {
+	opacity: 0.65;
+	font-family: var(--monaco-monospace-font);
+	font-size: 11px;
+}
+
+.monaco-workbench .hivemindide-agent-detail-activity-row {
+	display: flex;
+	gap: 10px;
+	align-items: flex-start;
+	font-size: 13px;
+	line-height: 1.45;
+}
+
+.monaco-workbench .hivemindide-agent-detail-activity-icon {
+	opacity: 0.55;
+	flex-shrink: 0;
+	line-height: 1.45;
+}
+
+.monaco-workbench .hivemindide-agent-detail-section-title {
+	font-size: 13px;
+	font-weight: 600;
+	margin: 0 0 10px;
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+
+.monaco-workbench .hivemindide-agent-detail-check-mark {
+	color: var(--vscode-charts-green, #89d185);
+	font-weight: 700;
+}
+
+.monaco-workbench .hivemindide-agent-detail-checks {
+	margin-bottom: 22px;
+}
+
+.monaco-workbench .hivemindide-agent-detail-check-row {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 6px 0;
+	border-bottom: 1px solid var(--vscode-panel-border, transparent);
+	font-size: 12px;
+}
+
+.monaco-workbench .hivemindide-agent-detail-check-row code {
+	font-family: var(--monaco-monospace-font);
+	font-size: 12px;
+}
+
+.monaco-workbench .hivemindide-agent-detail-check-status {
+	opacity: 0.7;
+	text-transform: lowercase;
+}
+
+.monaco-workbench .hivemindide-agent-detail-check-status.passed {
+	color: var(--vscode-charts-green, #89d185);
+	opacity: 1;
+}
+
+.monaco-workbench .hivemindide-agent-detail-check-status.failed {
+	color: var(--vscode-errorForeground);
+	opacity: 1;
+}
+
+.monaco-workbench .hivemindide-agent-detail-diff-summary {
+	font-weight: 400;
+	opacity: 0.65;
+	font-size: 12px;
+}
+
+.monaco-workbench .hivemindide-agent-detail-diff-file {
+	border: 1px solid var(--vscode-panel-border, var(--vscode-widget-border));
+	border-radius: 8px;
+	overflow: hidden;
+	background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+}
+
+.monaco-workbench .hivemindide-agent-detail-diff-path {
+	padding: 8px 12px;
+	font-family: var(--monaco-monospace-font);
+	font-size: 12px;
+	border-bottom: 1px solid var(--vscode-panel-border, transparent);
+	opacity: 0.85;
+}
+
+.monaco-workbench .hivemindide-agent-detail-diff-code {
+	padding: 8px 0;
+	font-family: var(--monaco-monospace-font);
+	font-size: 12px;
+	line-height: 1.5;
+	overflow-x: auto;
+}
+
+.monaco-workbench .hivemindide-agent-detail-diff-line {
+	padding: 0 12px;
+	white-space: pre;
+}
+
+.monaco-workbench .hivemindide-agent-detail-diff-line .prefix {
+	display: inline-block;
+	width: 1.2em;
+	opacity: 0.7;
+}
+
+.monaco-workbench .hivemindide-agent-detail-diff-line.add {
+	background: color-mix(in srgb, var(--vscode-diffEditor-insertedLineBackground, rgba(155, 185, 85, 0.2)) 80%, transparent);
+	color: var(--vscode-gitDecoration-addedResourceForeground, inherit);
+}
+
+.monaco-workbench .hivemindide-agent-detail-diff-line.del {
+	background: color-mix(in srgb, var(--vscode-diffEditor-removedLineBackground, rgba(255, 0, 0, 0.2)) 80%, transparent);
+}
+
+.monaco-workbench .hivemindide-agent-detail-footers {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 22px;
+}
+
+.monaco-workbench .hivemindide-agent-detail-footer-pill {
+	font-size: 11px;
+	padding: 4px 10px;
+	border-radius: 999px;
+	border: 1px solid var(--vscode-panel-border, var(--vscode-widget-border));
+	opacity: 0.85;
+}

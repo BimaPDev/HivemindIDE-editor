@@ -1,42 +1,41 @@
 {
-	"nameShort": "Code - OSS",
-	"nameLong": "Code - OSS",
-	"applicationName": "code-oss",
-	"dataFolderName": ".vscode-oss",
-	"sharedDataFolderName": ".vscode-oss-shared",
-	"win32MutexName": "vscodeoss",
+	"nameShort": "HivemindIDE",
+	"nameLong": "HivemindIDE",
+	"applicationName": "hivemindide",
+	"dataFolderName": ".hivemindide",
+	"sharedDataFolderName": ".hivemindide-shared",
+	"win32MutexName": "hivemindide",
 	"licenseName": "MIT",
-	"licenseUrl": "https://github.com/microsoft/vscode/blob/main/LICENSE.txt",
-	"serverLicenseUrl": "https://github.com/microsoft/vscode/blob/main/LICENSE.txt",
+	"licenseUrl": "https://github.com/BimaPDev/HivemindIDE-editor/blob/main/LICENSE.txt",
+	"serverLicenseUrl": "https://github.com/BimaPDev/HivemindIDE-editor/blob/main/LICENSE.txt",
 	"serverGreeting": [],
 	"serverLicense": [],
 	"serverLicensePrompt": "",
-	"serverApplicationName": "code-server-oss",
-	"serverDataFolderName": ".vscode-server-oss",
-	"tunnelApplicationName": "code-tunnel-oss",
-	"win32DirName": "Microsoft Code OSS",
-	"win32NameVersion": "Microsoft Code OSS",
-	"win32RegValueName": "CodeOSS",
+	"serverApplicationName": "hivemindide-server",
+	"serverDataFolderName": ".hivemindide-server",
+	"tunnelApplicationName": "hivemindide-tunnel",
+	"win32DirName": "HivemindIDE",
+	"win32NameVersion": "HivemindIDE",
+	"win32RegValueName": "HivemindIDE",
 	"win32x64AppId": "{{D77B7E06-80BA-4137-BCF4-654B95CCEBC5}",
 	"win32arm64AppId": "{{D1ACE434-89C5-48D1-88D3-E2991DF85475}",
 	"win32x64UserAppId": "{{CC6B787D-37A0-49E8-AE24-8559A032BE0C}",
 	"win32arm64UserAppId": "{{3AEBF0C8-F733-4AD4-BADE-FDB816D53D7B}",
-	"win32AppUserModelId": "Microsoft.CodeOSS",
-	"win32ShellNameShort": "C&ode - OSS",
-	"win32TunnelServiceMutex": "vscodeoss-tunnelservice",
-	"win32TunnelMutex": "vscodeoss-tunnel",
-	"darwinBundleIdentifier": "com.visualstudio.code.oss",
+	"win32AppUserModelId": "HivemindIDE.HivemindIDE",
+	"win32ShellNameShort": "HivemindIDE",
+	"win32TunnelServiceMutex": "hivemindide-tunnelservice",
+	"win32TunnelMutex": "hivemindide-tunnel",
+	"darwinBundleIdentifier": "com.hivemindide.HivemindIDE",
 	"darwinProfileUUID": "47827DD9-4734-49A0-AF80-7E19B11495CC",
 	"darwinProfilePayloadUUID": "CF808BE7-53F3-46C6-A7E2-7EDB98A5E959",
-	"linuxDesktopName": "com.visualstudio.CodeOSS",
-	"linuxIconName": "code-oss",
+	"linuxDesktopName": "com.hivemindide.HivemindIDE",
+	"linuxIconName": "hivemindide",
 	"licenseFileName": "LICENSE.txt",
-	"reportIssueUrl": "https://github.com/microsoft/vscode/issues/new",
+	"reportIssueUrl": "https://github.com/BimaPDev/HivemindIDE-editor/issues/new",
 	"nodejsArtifactFeed": "",
 	"electronArtifactFeed": "",
-	"urlProtocol": "code-oss",
-	"agentsTelemetryAppName": "agents",
-	"webviewContentExternalBaseUrlTemplate": "https://{{uuid}}.vscode-cdn.net/insider/ef65ac1ba57f57f2a3961bfe94aa20481caca4c6/out/vs/workbench/contrib/webview/browser/pre/",
+	"urlProtocol": "hivemindide",
+	"webviewContentExternalBaseUrlTemplate": "",
 	"builtInExtensions": [
 		{
 			"name": "ms-vscode.js-debug-companion",
@@ -85,86 +84,94 @@
 				},
 				"publisherDisplayName": "Microsoft"
 			}
+		},
+		{
+			"name": "Catppuccin.catppuccin-vsc",
+			"version": "3.19.0",
+			"sha256": "ebf347664837edbe91c9920ff3d14c96d4a28beeec0b95137c76058326329780",
+			"repo": "https://github.com/catppuccin/vscode",
+			"metadata": {
+				"id": "69264e4d-cd3b-468a-8f2b-e69673c7d864",
+				"publisherId": {
+					"publisherId": "e7d2ed61-53e0-4dd4-afbe-f536c3bb4316",
+					"publisherName": "Catppuccin",
+					"displayName": "Catppuccin",
+					"flags": "verified"
+				},
+				"publisherDisplayName": "Catppuccin"
+			}
+		},
+		{
+			"name": "Catppuccin.catppuccin-vsc-icons",
+			"version": "1.26.0",
+			"sha256": "57566136d0a8ba8d040eb6e5be866c88ccbb04f3d219d3a7e52a19978900ff3d",
+			"repo": "https://github.com/catppuccin/vscode-icons",
+			"metadata": {
+				"id": "625b9abd-dfac-405b-bf34-e65f46e2f22f",
+				"publisherId": {
+					"publisherId": "e7d2ed61-53e0-4dd4-afbe-f536c3bb4316",
+					"publisherName": "Catppuccin",
+					"displayName": "Catppuccin",
+					"flags": "verified"
+				},
+				"publisherDisplayName": "Catppuccin"
+			}
 		}
 	],
 	"defaultChatAgent": {
-		"extensionId": "GitHub.copilot",
-		"chatExtensionId": "GitHub.copilot-chat",
-		"chatExtensionOutputId": "GitHub.copilot-chat.GitHub Copilot Chat.log",
-		"chatExtensionOutputExtensionStateCommand": "github.copilot.debug.extensionState",
-		"documentationUrl": "https://aka.ms/github-copilot-overview",
-		"termsStatementUrl": "https://aka.ms/github-copilot-terms-statement",
-		"privacyStatementUrl": "https://aka.ms/github-copilot-privacy-statement",
-		"skusDocumentationUrl": "https://aka.ms/github-copilot-plans",
-		"optimizeUsageDocumentationUrl": "https://aka.ms/token-usage-tips",
-		"publicCodeMatchesUrl": "https://aka.ms/github-copilot-match-public-code",
-		"managePlanUrl": "https://aka.ms/github-copilot-manage-plan",
-		"upgradePlanUrl": "https://aka.ms/github-copilot-upgrade-plan",
-		"signUpUrl": "https://aka.ms/github-sign-up",
+		"extensionId": "",
+		"chatExtensionId": "",
+		"chatExtensionOutputId": "",
+		"chatExtensionOutputExtensionStateCommand": "",
+		"documentationUrl": "",
+		"skusDocumentationUrl": "",
+		"optimizeUsageDocumentationUrl": "",
+		"publicCodeMatchesUrl": "",
+		"managePlanUrl": "",
+		"upgradePlanUrl": "",
+		"signUpUrl": "",
+		"termsStatementUrl": "",
+		"privacyStatementUrl": "",
 		"provider": {
 			"default": {
-				"id": "github",
-				"name": "GitHub"
+				"id": "",
+				"name": ""
 			},
 			"enterprise": {
-				"id": "github-enterprise",
-				"name": "GHE"
+				"id": "",
+				"name": ""
 			},
 			"google": {
-				"id": "google",
-				"name": "Google"
+				"id": "",
+				"name": ""
 			},
 			"apple": {
-				"id": "apple",
-				"name": "Apple"
+				"id": "",
+				"name": ""
 			},
 			"microsoft": {
-				"id": "microsoft",
-				"name": "Microsoft"
+				"id": "",
+				"name": ""
 			}
 		},
-		"providerExtensionId": "vscode.github-authentication",
-		"providerUriSetting": "github-enterprise.uri",
-		"providerScopes": [
-			[
-				"read:user",
-				"user:email",
-				"repo",
-				"workflow"
-			],
-			[
-				"user:email"
-			],
-			[
-				"read:user"
-			]
-		],
-		"entitlementUrl": "https://api.github.com/copilot_internal/user",
-		"entitlementSignupLimitedUrl": "https://api.github.com/copilot_internal/subscribe_limited_user",
-		"chatQuotaExceededContext": "github.copilot.chat.quotaExceeded",
-		"completionsQuotaExceededContext": "github.copilot.completions.quotaExceeded",
-		"walkthroughCommand": "github.copilot.open.walkthrough",
-		"completionsMenuCommand": "github.copilot.toggleStatusMenu",
-		"chatRefreshTokenCommand": "github.copilot.refreshToken",
-		"generateCommitMessageCommand": "github.copilot.git.generateCommitMessage",
-		"resolveMergeConflictsCommand": "github.copilot.git.resolveMergeConflicts",
-		"completionsAdvancedSetting": "github.copilot.advanced",
-		"completionsEnablementSetting": "github.copilot.enable",
-		"nextEditSuggestionsSetting": "github.copilot.nextEditSuggestions.enabled",
-		"tokenEntitlementUrl": "https://api.github.com/copilot_internal/v2/token",
-		"mcpRegistryDataUrl": "https://api.github.com/copilot/mcp_registry",
-		"managedSettingsUrl": "https://api.github.com/copilot_internal/managed_settings"
-	},
-	"trustedExtensionAuthAccess": {
-		"github": [
-			"GitHub.copilot-chat"
-		],
-		"github-enterprise": [
-			"GitHub.copilot-chat"
-		],
-		"microsoft": [
-			"vscode.github-authentication"
-		]
+		"providerExtensionId": "",
+		"providerUriSetting": "",
+		"providerScopes": [],
+		"entitlementUrl": "",
+		"entitlementSignupLimitedUrl": "",
+		"tokenEntitlementUrl": "",
+		"mcpRegistryDataUrl": "",
+		"managedSettingsUrl": "",
+		"chatQuotaExceededContext": "",
+		"completionsQuotaExceededContext": "",
+		"walkthroughCommand": "",
+		"completionsMenuCommand": "",
+		"chatRefreshTokenCommand": "",
+		"generateCommitMessageCommand": "",
+		"resolveMergeConflictsCommand": "",
+		"completionsAdvancedSetting": "",
+		"completionsEnablementSetting": "",
+		"nextEditSuggestionsSetting": ""
 	},
 	"onboardingKeymaps": [
 		{
@@ -205,9 +212,15 @@
 	],
 	"onboardingThemes": [
 		{
-			"id": "dark-2026",
-			"label": "Dark 2026",
-			"themeId": "Dark 2026",
+			"id": "catppuccin-macchiato",
+			"label": "Catppuccin Macchiato",
+			"themeId": "Catppuccin Macchiato",
+			"type": "dark"
+		},
+		{
+			"id": "catppuccin-mocha",
+			"label": "Catppuccin Mocha",
+			"themeId": "Catppuccin Mocha",
 			"type": "dark"
 		},
 		{
@@ -217,15 +230,9 @@
 			"type": "hcDark"
 		},
 		{
-			"id": "solarized-dark",
-			"label": "Solarized Dark",
-			"themeId": "Solarized Dark",
-			"type": "dark"
-		},
-		{
-			"id": "light-2026",
-			"label": "Light 2026",
-			"themeId": "Light 2026",
+			"id": "catppuccin-latte",
+			"label": "Catppuccin Latte",
+			"themeId": "Catppuccin Latte",
 			"type": "light"
 		},
 		{
@@ -233,17 +240,21 @@
 			"label": "Light High Contrast",
 			"themeId": "Default High Contrast Light",
 			"type": "hcLight"
-		},
-		{
-			"id": "solarized-light",
-			"label": "Solarized Light",
-			"themeId": "Solarized Light",
-			"type": "light"
 		}
 	],
-	"builtInExtensionsEnabledWithAutoUpdates": [
-		"GitHub.copilot-chat"
-	],
 	"sessionsWindowAllowedExtensions": [],
-	"voiceWsUrl": "wss://falcon-caas.mai.microsoft.com/voice-code/api/v1/realtime/voice"
+	"extensionsGallery": {
+		"serviceUrl": "https://open-vsx.org/vscode/gallery",
+		"itemUrl": "https://open-vsx.org/vscode/item",
+		"latestUrlTemplate": "https://open-vsx.org/vscode/gallery/{publisher}/{name}/latest",
+		"resourceUrlTemplate": "https://open-vsx.org/vscode/unpkg/{publisher}/{name}/{version}/{path}",
+		"controlUrl": "https://raw.githubusercontent.com/EclipseFdn/publish-extensions/refs/heads/master/extension-control/extensions.json",
+		"recommendationsUrl": ""
+	},
+	"linkProtectionTrustedDomains": [
+		"https://open-vsx.org"
+	],
+	"enableTelemetry": false,
+	"tunnelApplicationConfig": {},
+	"builtInExtensionsEnabledWithAutoUpdates": []
 }

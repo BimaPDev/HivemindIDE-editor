@@ -236,7 +236,7 @@ import './contrib/chat/browser/chat.view.contribution.js';
 import './contrib/inlineChat/browser/inlineChat.contribution.js';
 
 // Copilot Voice
-import './contrib/agentsVoice/browser/agentsVoice.contribution.js';
+// import './contrib/agentsVoice/browser/agentsVoice.contribution.js'; // HivemindIDE: no Copilot Voice
 import './contrib/mcp/browser/mcp.contribution.js';
 import './contrib/mcp/browser/mcp.view.contribution.js';
 import './contrib/chat/browser/chatSessions/chatSessions.contribution.js';
@@ -377,6 +377,7 @@ import './contrib/folding/browser/folding.contribution.js';
 
 // Limit Indicator
 import './contrib/limitIndicator/browser/limitIndicator.contribution.js';
+import './contrib/hivemindide/browser/hivemindide.contribution.js';
 
 // Inlay Hint Accessibility
 import './contrib/inlayHints/browser/inlayHintsAccessibilty.js';

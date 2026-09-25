@@ -237,15 +237,12 @@ class PreferencesActionsContribution extends Disposable implements IWorkbenchCon
 						when: null,
 						primary: KeyMod.CtrlCmd | KeyCode.Comma,
 					},
-					menu: [{
-						id: MenuId.GlobalActivity,
-						group: '2_configuration',
-						order: 2
-					}, {
-						id: MenuId.MenubarPreferencesMenu,
-						group: '2_configuration',
-						order: 2
-					}],
+					// HivemindIDE: MenubarPreferencesMenu / GlobalActivity moved to
+					// hivemindide.action.openSettings so Cmd+, and Settings open the
+					// product settings page. Deep links with a query still use this
+					// command → native SettingsEditor2.
+					f1: true,
+					category,
 				});
 			}
 			run(accessor: ServicesAccessor, args: string | IOpenSettingsActionOptions) {

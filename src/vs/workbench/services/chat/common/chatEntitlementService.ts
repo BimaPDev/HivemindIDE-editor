@@ -455,8 +455,9 @@ export class ChatEntitlementService extends Disposable implements IChatEntitleme
 			return;
 		}
 
-		if (!productService.defaultChatAgent) {
-			return; // we need a default chat agent configured going forward from here
+		if (!productService.defaultChatAgent?.chatExtensionId) {
+			ChatEntitlementContextKeys.Setup.hidden.bindTo(this.contextKeyService).set(true); // no Copilot agent configured
+			return;
 		}
 
 		const context = this.context = new Lazy(() => this._register(instantiationService.createInstance(ChatEntitlementContext)));

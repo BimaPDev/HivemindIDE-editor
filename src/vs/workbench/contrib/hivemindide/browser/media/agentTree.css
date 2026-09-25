@@ -1,0 +1,192 @@
+/*---------------------------------------------------------------------------------------------
+ *  Agent spawn tree styles — author+AI root → junction → sub-agents.
+ *--------------------------------------------------------------------------------------------*/
+
+.monaco-workbench .hivemindide-agent-tree {
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.monaco-workbench .hivemindide-agent-tree-status {
+	padding: 6px 12px;
+	font-size: 11px;
+	opacity: 0.75;
+	border-bottom: 1px solid var(--vscode-panel-border, transparent);
+	flex-shrink: 0;
+}
+
+.monaco-workbench .hivemindide-agent-tree-status.live {
+	color: var(--vscode-charts-green, #89d185);
+}
+
+.monaco-workbench .hivemindide-agent-tree-status.demo {
+	color: var(--vscode-descriptionForeground);
+}
+
+.monaco-workbench .hivemindide-agent-tree-status.error {
+	color: var(--vscode-errorForeground);
+}
+
+.monaco-workbench .hivemindide-agent-tree-pane {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	overflow: hidden;
+}
+
+.monaco-workbench .hivemindide-agent-tree-scroll {
+	flex: 1;
+	overflow: auto;
+	padding: 16px 12px 24px;
+}
+
+.monaco-workbench .hivemindide-agent-tree-empty {
+	padding: 16px 12px;
+	opacity: 0.7;
+	font-style: italic;
+}
+
+.monaco-workbench .hivemindide-agent-tree-host {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	min-width: max-content;
+	margin: 0 auto;
+}
+
+.monaco-workbench .hivemindide-agent-branch {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	position: relative;
+}
+
+.monaco-workbench .hivemindide-agent-card {
+	width: 168px;
+	padding: 10px 12px;
+	background: var(--vscode-sideBar-background);
+	border: 1px solid var(--vscode-panel-border, var(--vscode-widget-border));
+	border-radius: 8px;
+	text-align: left;
+	cursor: pointer;
+}
+
+.monaco-workbench .hivemindide-agent-card:hover {
+	border-color: var(--vscode-focusBorder, var(--vscode-textLink-foreground));
+}
+
+.monaco-workbench .hivemindide-agent-card:focus {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: 1px;
+}
+
+.monaco-workbench .hivemindide-agent-card.root {
+	width: 196px;
+	border-color: var(--vscode-focusBorder, var(--vscode-textLink-foreground));
+}
+
+.monaco-workbench .hivemindide-agent-card.agent {
+	border-color: color-mix(in srgb, var(--vscode-charts-green, #89d185) 45%, var(--vscode-panel-border, transparent));
+}
+
+.monaco-workbench .hivemindide-agent-author {
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--vscode-textLink-foreground);
+	margin-bottom: 4px;
+}
+
+.monaco-workbench .hivemindide-agent-who {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.monaco-workbench .hivemindide-agent-model {
+	margin-top: 4px;
+	font-size: 11px;
+	font-family: var(--monaco-monospace-font);
+	opacity: 0.8;
+}
+
+.monaco-workbench .hivemindide-agent-model strong {
+	font-weight: 600;
+	color: var(--vscode-charts-green, #89d185);
+	opacity: 1;
+}
+
+.monaco-workbench .hivemindide-agent-meta {
+	margin-top: 6px;
+}
+
+.monaco-workbench .hivemindide-agent-pill {
+	display: inline-block;
+	font-size: 10px;
+	padding: 1px 7px;
+	border-radius: 99px;
+	border: 1px solid var(--vscode-panel-border, var(--vscode-widget-border));
+	opacity: 0.85;
+	text-transform: lowercase;
+}
+
+.monaco-workbench .hivemindide-agent-pill.active {
+	color: var(--vscode-charts-green, #89d185);
+	border-color: var(--vscode-charts-green, #89d185);
+}
+
+.monaco-workbench .hivemindide-agent-pill.kind-root {
+	color: var(--vscode-textLink-foreground);
+	border-color: var(--vscode-textLink-foreground);
+}
+
+.monaco-workbench .hivemindide-agent-edge {
+	width: 2px;
+	height: 16px;
+	background: var(--vscode-panel-border, var(--vscode-widget-border));
+	flex-shrink: 0;
+}
+
+.monaco-workbench .hivemindide-agent-junction {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: var(--vscode-sideBar-background);
+	border: 2px solid var(--vscode-panel-border, var(--vscode-widget-border));
+	flex-shrink: 0;
+}
+
+.monaco-workbench .hivemindide-agent-children {
+	display: flex;
+	align-items: flex-start;
+	justify-content: center;
+	position: relative;
+	gap: 16px;
+	padding-top: 16px;
+}
+
+.monaco-workbench .hivemindide-agent-children::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: var(--hivemindide-bar-left, 50%);
+	right: var(--hivemindide-bar-right, 50%);
+	height: 2px;
+	background: var(--vscode-panel-border, var(--vscode-widget-border));
+}
+
+.monaco-workbench .hivemindide-agent-children > .hivemindide-agent-branch::before {
+	content: "";
+	position: absolute;
+	top: -16px;
+	left: 50%;
+	width: 2px;
+	height: 16px;
+	background: var(--vscode-panel-border, var(--vscode-widget-border));
+	transform: translateX(-50%);
+}

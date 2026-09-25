@@ -13,9 +13,6 @@ interface IPackageConfiguration {
 	readonly dependencies?: Readonly<Record<string, string>>;
 }
 
-function getDependencyVersion(packageConfiguration: IPackageConfiguration, packageName: string): string | undefined {
-	return packageConfiguration.dependencies?.[packageName]?.replace(/^[~^]/, '');
-}
 
 /**
  * @deprecated It is preferred that you use `IProductService` if you can. This
@@ -59,12 +56,6 @@ else if (globalThis._VSCODE_PRODUCT_JSON && globalThis._VSCODE_PACKAGE_JSON) {
 		});
 	}
 
-	if (!product.copilotVersions) {
-		const sdk = getDependencyVersion(packageConfiguration, '@github/copilot-sdk');
-		if (packageConfiguration.copilotRuntimeVersion && sdk) {
-			Object.assign(product, { copilotVersions: { runtime: packageConfiguration.copilotRuntimeVersion, sdk } });
-		}
-	}
 }
 
 // Web environment or unknown
@@ -88,8 +79,8 @@ else {
 			licenseUrl: 'https://github.com/microsoft/vscode/blob/main/LICENSE.txt',
 			serverLicenseUrl: 'https://github.com/microsoft/vscode/blob/main/LICENSE.txt',
 			defaultChatAgent: {
-				extensionId: 'GitHub.copilot',
-				chatExtensionId: 'GitHub.copilot-chat',
+				extensionId: '',
+				chatExtensionId: '',
 				provider: {
 					default: {
 						id: 'github',

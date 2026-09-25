@@ -1,0 +1,281 @@
+/*---------------------------------------------------------------------------------------------
+ *  User sidebar — icon rail + content panel inside the sidebar (not the activity bar).
+ *--------------------------------------------------------------------------------------------*/
+
+import './media/userSidebar.css';
+import { $, append, clearNode } from '../../../../base/browser/dom.js';
+import { InputBox } from '../../../../base/browser/ui/inputbox/inputBox.js';
+import { Checkbox } from '../../../../base/browser/ui/toggle/toggle.js';
+import { Codicon } from '../../../../base/common/codicons.js';
+import { DisposableStore, MutableDisposable } from '../../../../base/common/lifecycle.js';
+import { ThemeIcon } from '../../../../base/common/themables.js';
+import { localize } from '../../../../nls.js';
+import { ICommandService } from '../../../../platform/commands/common/commands.js';
+import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
+import { IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
+import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
+import { IContextViewService } from '../../../../platform/contextview/browser/contextView.js';
+import { IHoverService } from '../../../../platform/hover/browser/hover.js';
+import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
+import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
+import { IOpenerService } from '../../../../platform/opener/common/opener.js';
+import { defaultCheckboxStyles, defaultInputBoxStyles } from '../../../../platform/theme/browser/defaultStyles.js';
+import { IThemeService } from '../../../../platform/theme/common/themeService.js';
+import { IViewPaneOptions, ViewPane } from '../../../browser/parts/views/viewPane.js';
+import { IViewDescriptorService } from '../../../common/views.js';
+import { HIVEMINDIDE_CONFIG_SECTION, HivemindIDESettings } from '../common/hivemindideConfiguration.js';
+import { HIVEMINDIDE_USER_VIEW_ID, UserRailState, UserRailTab } from '../common/userSidebar.js';
+
+interface IRailTab {
+	readonly id: UserRailTab;
+	readonly label: string;
+	readonly icon: ThemeIcon;
+}
+
+interface IActionRow {
+	readonly label: string;
+	readonly commandId: string;
+	readonly icon: ThemeIcon;
+	readonly hint?: string;
+}
+
+const RAIL_TABS: readonly IRailTab[] = [
+	{ id: 'settings', label: localize('hivemindide.user.rail.settings', "Settings"), icon: Codicon.settingsGear },
+	{ id: 'code', label: localize('hivemindide.user.rail.code', "Code"), icon: Codicon.folderOpened },
+	{ id: 'account', label: localize('hivemindide.user.rail.account', "Account"), icon: Codicon.account },
+];
+
+const CODE_ACTIONS: readonly IActionRow[] = [
+	{ label: localize('hivemindide.user.openFolder', "Open Folder"), commandId: 'workbench.action.files.openFolder', icon: Codicon.folderOpened },
+	{ label: localize('hivemindide.user.commandPalette', "Command Palette"), commandId: 'workbench.action.showCommands', icon: Codicon.terminalCmd, hint: '⌘⇧P' },
+	{ label: localize('hivemindide.user.extensions', "Extensions"), commandId: 'workbench.view.extensions', icon: Codicon.extensions },
+	{ label: localize('hivemindide.user.keyboardShortcuts', "Keyboard Shortcuts"), commandId: 'workbench.action.openGlobalKeybindings', icon: Codicon.keyboard },
+	{ label: localize('hivemindide.user.themes', "Color Theme"), commandId: 'workbench.action.selectTheme', icon: Codicon.symbolColor },
+];
+
+const ACCOUNT_ACTIONS: readonly IActionRow[] = [
+	{ label: localize('hivemindide.user.profiles', "Profiles"), commandId: 'workbench.profiles.actions.manageProfiles', icon: Codicon.account },
+];
+
+export class UserSidebarViewPane extends ViewPane {
+
+	static readonly ID = HIVEMINDIDE_USER_VIEW_ID;
+
+	private shell: HTMLElement | undefined;
+	private railEl: HTMLElement | undefined;
+	private contentEl: HTMLElement | undefined;
+	private readonly contentStore = this._register(new MutableDisposable<DisposableStore>());
+
+	constructor(
+		options: IViewPaneOptions,
+		@IKeybindingService keybindingService: IKeybindingService,
+		@IContextMenuService contextMenuService: IContextMenuService,
+		@IConfigurationService configurationService: IConfigurationService,
+		@IContextKeyService contextKeyService: IContextKeyService,
+		@IViewDescriptorService viewDescriptorService: IViewDescriptorService,
+		@IInstantiationService instantiationService: IInstantiationService,
+		@IOpenerService openerService: IOpenerService,
+		@IThemeService themeService: IThemeService,
+		@IHoverService hoverService: IHoverService,
+		@ICommandService private readonly commandService: ICommandService,
+		@IContextViewService private readonly contextViewService: IContextViewService,
+	) {
+		super(options, keybindingService, contextMenuService, configurationService, contextKeyService, viewDescriptorService, instantiationService, openerService, themeService, hoverService);
+
+		this._register(UserRailState.onDidChangeTab(() => {
+			this.renderRail();
+			this.renderContent();
+		}));
+		this._register(this.configurationService.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration(HIVEMINDIDE_CONFIG_SECTION) && UserRailState.tab === 'settings') {
+				this.renderContent();
+			}
+		}));
+	}
+
+	protected override renderBody(container: HTMLElement): void {
+		super.renderBody(container);
+		this.shell = append(container, $('.hivemindide-user-shell'));
+		this.railEl = append(this.shell, $('.hivemindide-user-rail'));
+		this.contentEl = append(this.shell, $('.hivemindide-user-content'));
+		this.renderRail();
+		this.renderContent();
+	}
+
+	protected override layoutBody(height: number, width: number): void {
+		super.layoutBody(height, width);
+		if (this.shell) {
+			this.shell.style.height = `${height}px`;
+			this.shell.style.width = `${width}px`;
+		}
+	}
+
+	private renderRail(): void {
+		if (!this.railEl) {
+			return;
+		}
+		clearNode(this.railEl);
+
+		for (const tab of RAIL_TABS) {
+			const btn = append(this.railEl, $('button.hivemindide-user-rail-btn')) as HTMLButtonElement;
+			btn.type = 'button';
+			btn.title = tab.label;
+			btn.setAttribute('aria-label', tab.label);
+			const active = UserRailState.tab === tab.id;
+			btn.setAttribute('aria-pressed', String(active));
+			if (active) {
+				btn.classList.add('active');
+			}
+
+			const icon = append(btn, $('span'));
+			icon.classList.add(...ThemeIcon.asClassNameArray(tab.icon));
+			icon.setAttribute('aria-hidden', 'true');
+
+			const listener = (e: MouseEvent) => {
+				e.preventDefault();
+				UserRailState.setTab(tab.id);
+			};
+			btn.addEventListener('click', listener);
+			this._register({ dispose: () => btn.removeEventListener('click', listener) });
+		}
+
+		append(this.railEl, $('.hivemindide-user-rail-spacer'));
+	}
+
+	private renderContent(): void {
+		if (!this.contentEl) {
+			return;
+		}
+
+		const store = new DisposableStore();
+		this.contentStore.value = store;
+		clearNode(this.contentEl);
+
+		switch (UserRailState.tab) {
+			case 'settings':
+				this.renderSettingsContent(this.contentEl, store);
+				break;
+			case 'code':
+				this.renderActionsContent(
+					this.contentEl,
+					store,
+					localize('hivemindide.user.codeTitle', "Code"),
+					localize('hivemindide.user.codeSubtitle', "Folders, commands, and editor chrome."),
+					CODE_ACTIONS,
+				);
+				break;
+			case 'account':
+				this.renderActionsContent(
+					this.contentEl,
+					store,
+					localize('hivemindide.user.accountTitle', "Account"),
+					localize('hivemindide.user.accountSubtitle', "Profiles and identity. Sign-in lands here later."),
+					ACCOUNT_ACTIONS,
+				);
+				break;
+		}
+	}
+
+	private renderSettingsContent(parent: HTMLElement, store: DisposableStore): void {
+		append(parent, $('h2.hivemindide-user-content-title')).textContent =
+			localize('hivemindide.user.settingsTitle', "HivemindIDE Settings");
+		append(parent, $('p.hivemindide-user-content-subtitle')).textContent =
+			localize('hivemindide.user.settingsSubtitle', "Product preferences. Open VS Code Settings for the full editor configuration.");
+
+		this.renderAction(parent, store, {
+			label: localize('hivemindide.user.vscodeSettings', "VS Code Settings"),
+			commandId: 'workbench.action.openSettings2',
+			icon: Codicon.settings,
+		});
+
+		append(parent, $('.hivemindide-user-section-label')).textContent =
+			localize('hivemindide.settings.section.usage', "Usage indicator");
+		this.renderBooleanSetting(parent, store, HivemindIDESettings.UsageIndicatorEnabled, localize('hivemindide.settings.usage.enabled', "Show usage indicator"), localize('hivemindide.usageIndicator.enabled', "Show a status bar indicator with AI coding assistant token usage, read from local tool data."));
+		this.renderBooleanSetting(parent, store, HivemindIDESettings.UsageIndicatorShowCost, localize('hivemindide.settings.usage.showCost', "Show estimated cost"), localize('hivemindide.usageIndicator.showCost', "Include estimated cost in the usage indicator's tooltip, when the local data reports it."));
+		this.renderNumberSetting(parent, store, HivemindIDESettings.UsageIndicatorDailyTokenBudget, localize('hivemindide.settings.usage.budget', "Daily token budget"), localize('hivemindide.settings.usage.budgetDesc', "Used to render usage as a percentage. Set to 0 to show the raw token count instead."));
+		this.renderNumberSetting(parent, store, HivemindIDESettings.UsageIndicatorRefreshSeconds, localize('hivemindide.settings.usage.refresh', "Refresh interval (seconds)"), localize('hivemindide.usageIndicator.refreshSeconds', "How often to re-read local usage data, in seconds."));
+
+		append(parent, $('.hivemindide-user-section-label')).textContent =
+			localize('hivemindide.settings.section.agents', "Agents");
+		this.renderBooleanSetting(parent, store, HivemindIDESettings.AgentTreeEnabled, localize('hivemindide.settings.agents.enabled', "Show Agents sidebar"), localize('hivemindide.agentTree.enabled', "Show the HivemindIDE Agents sidebar with the author+AI spawn tree."));
+		this.renderStringSetting(parent, store, HivemindIDESettings.AgentTreeCoordinationUrl, localize('hivemindide.settings.agents.url', "Coordination URL"), localize('hivemindide.agentTree.coordinationUrl', "Base URL of coordinationd."));
+		this.renderStringSetting(parent, store, HivemindIDESettings.AgentTreeRepoId, localize('hivemindide.settings.agents.repoId', "Repo ID"), localize('hivemindide.agentTree.repoId', "Repo ID passed to coordinationd."));
+		this.renderBooleanSetting(parent, store, HivemindIDESettings.AgentTreeDemoMode, localize('hivemindide.settings.agents.demo', "Demo mode"), localize('hivemindide.agentTree.demoMode', "Show a mock author+AI spawn tree when coordinationd has not yet emitted agent frames."));
+	}
+
+	private renderActionsContent(parent: HTMLElement, store: DisposableStore, title: string, subtitle: string, actions: readonly IActionRow[]): void {
+		append(parent, $('h2.hivemindide-user-content-title')).textContent = title;
+		append(parent, $('p.hivemindide-user-content-subtitle')).textContent = subtitle;
+		for (const action of actions) {
+			this.renderAction(parent, store, action);
+		}
+	}
+
+	private renderAction(parent: HTMLElement, store: DisposableStore, action: IActionRow): void {
+		const btn = append(parent, $('button.hivemindide-user-action')) as HTMLButtonElement;
+		btn.type = 'button';
+		const icon = append(btn, $('span.hivemindide-user-action-icon'));
+		icon.classList.add(...ThemeIcon.asClassNameArray(action.icon));
+		append(btn, $('span.hivemindide-user-action-label')).textContent = action.label;
+		if (action.hint) {
+			append(btn, $('span.hivemindide-user-action-hint')).textContent = action.hint;
+		}
+		const listener = (e: MouseEvent) => {
+			e.preventDefault();
+			this.commandService.executeCommand(action.commandId);
+		};
+		btn.addEventListener('click', listener);
+		store.add({ dispose: () => btn.removeEventListener('click', listener) });
+	}
+
+	private renderBooleanSetting(parent: HTMLElement, store: DisposableStore, key: HivemindIDESettings, label: string, description: string): void {
+		const row = append(parent, $('.hivemindide-user-setting-row'));
+		const head = append(row, $('.hivemindide-user-setting-row-head'));
+		const checkbox = store.add(new Checkbox(label, !!this.configurationService.getValue<boolean>(key), defaultCheckboxStyles));
+		append(head, checkbox.domNode);
+		append(head, $('p.hivemindide-user-setting-label')).textContent = label;
+		append(row, $('p.hivemindide-user-setting-desc')).textContent = description;
+		store.add(checkbox.onChange(() => this.configurationService.updateValue(key, checkbox.checked)));
+	}
+
+	private renderStringSetting(parent: HTMLElement, store: DisposableStore, key: HivemindIDESettings, label: string, description: string): void {
+		const row = append(parent, $('.hivemindide-user-setting-row'));
+		append(row, $('p.hivemindide-user-setting-label')).textContent = label;
+		append(row, $('p.hivemindide-user-setting-desc')).textContent = description;
+		const inputWrap = append(row, $('.hivemindide-user-setting-input'));
+		const input = store.add(new InputBox(inputWrap, this.contextViewService, { inputBoxStyles: defaultInputBoxStyles }));
+		const value = this.configurationService.getValue(key);
+		input.value = value === undefined || value === null ? '' : String(value);
+		let debounce: ReturnType<typeof setTimeout> | undefined;
+		store.add(input.onDidChange(text => {
+			if (debounce) {
+				clearTimeout(debounce);
+			}
+			debounce = setTimeout(() => this.configurationService.updateValue(key, text), 300);
+		}));
+		store.add({ dispose: () => { if (debounce) { clearTimeout(debounce); } } });
+	}
+
+	private renderNumberSetting(parent: HTMLElement, store: DisposableStore, key: HivemindIDESettings, label: string, description: string): void {
+		const row = append(parent, $('.hivemindide-user-setting-row'));
+		append(row, $('p.hivemindide-user-setting-label')).textContent = label;
+		append(row, $('p.hivemindide-user-setting-desc')).textContent = description;
+		const inputWrap = append(row, $('.hivemindide-user-setting-input'));
+		const input = store.add(new InputBox(inputWrap, this.contextViewService, { inputBoxStyles: defaultInputBoxStyles, type: 'number' }));
+		const value = this.configurationService.getValue(key);
+		input.value = value === undefined || value === null ? '' : String(value);
+		let debounce: ReturnType<typeof setTimeout> | undefined;
+		store.add(input.onDidChange(text => {
+			if (debounce) {
+				clearTimeout(debounce);
+			}
+			debounce = setTimeout(() => {
+				const n = Number(text);
+				if (Number.isFinite(n)) {
+					this.configurationService.updateValue(key, n);
+				}
+			}, 300);
+		}));
+		store.add({ dispose: () => { if (debounce) { clearTimeout(debounce); } } });
+	}
+}

@@ -191,7 +191,10 @@ export class ChatStatusBarEntry extends Disposable implements IWorkbenchContribu
 
 	private update(): void {
 		const sentiment = this.chatEntitlementService.sentiment;
-		if (!sentiment.hidden) {
+		// No chat agent extension configured (HivemindIDE ships an empty stub) — never
+		// show the Copilot status entry, even if persisted setup context says otherwise.
+		const noChatAgent = !product.defaultChatAgent?.chatExtensionId;
+		if (!noChatAgent && !sentiment.hidden) {
 			const props = this.getEntryProps();
 			if (this.entry) {
 				this.entry.update(props);

@@ -19,8 +19,8 @@ export interface IAppInsightsCore {
 	unload(isAsync: boolean, unloadComplete: (unloadState: ITelemetryUnloadState) => void): void;
 }
 
-const endpointUrl = 'https://mobile.events.data.microsoft.com/OneCollector/1.0';
-const endpointHealthUrl = 'https://mobile.events.data.microsoft.com/ping';
+const endpointUrl = 'https://0.0.0.0/OneCollector/1.0';
+const endpointHealthUrl = 'https://0.0.0.0/ping';
 
 /** Fills in the envelope fields every event needs, including the internal-only routing flag. */
 export function applyEnvelopeDefaults(envelope: ITelemetryItem, isInternalMachine: boolean | undefined): void {
