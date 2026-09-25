@@ -1,4 +1,9 @@
 /*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/*---------------------------------------------------------------------------------------------
  *  Agent spawn tree styles — author+AI root → junction → sub-agents.
  *--------------------------------------------------------------------------------------------*/
 
@@ -88,8 +93,7 @@
 	width: 196px;
 }
 
-/* Running cards use the chat input's border beam. The comet also steps through
-   the theme's beam colors, one hue per lap, the same way the composer does. */
+/* Running cards use the chat input's border beam. The comet also steps through the theme's beam colors, one hue per lap, the same way the composer does. */
 @property --hivemind-card-beam {
 	syntax: '<color>';
 	inherits: false;
@@ -105,9 +109,9 @@
 	100% { --hivemind-card-beam: var(--vscode-hivemind-beam1, #ff7a1a); }
 }
 
+/* Unlike the chat input, a card keeps its outline under the beam: its background matches the view's, so without the border only the comet would show where it is. */
 .monaco-workbench .hivemindide-agent-card.running {
 	--chat-input-anim-duration: 3s;
-	border-color: var(--vscode-hivemind-beamTrack, var(--vscode-panel-border, transparent));
 	overflow: visible;
 }
 
@@ -155,15 +159,14 @@
 		transparent 360deg);
 }
 
-@media (prefers-reduced-motion: reduce) {
-	.monaco-workbench .hivemindide-agent-card.running::before,
-	.monaco-workbench .hivemindide-agent-card.running::after {
-		animation: none;
-	}
+/* The workbench class rather than the media query, so `workbench.reduceMotion` decides (see visor.css). */
+.monaco-workbench.monaco-reduce-motion .hivemindide-agent-card.running::before,
+.monaco-workbench.monaco-reduce-motion .hivemindide-agent-card.running::after {
+	animation: none;
+}
 
-	.monaco-workbench .hivemindide-agent-card.running {
-		border-color: var(--hivemind-card-beam);
-	}
+.monaco-workbench.monaco-reduce-motion .hivemindide-agent-card.running {
+	border-color: var(--hivemind-card-beam);
 }
 
 .monaco-workbench .hivemindide-agent-author {

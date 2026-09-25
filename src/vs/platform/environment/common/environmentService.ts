@@ -217,11 +217,14 @@ export abstract class AbstractNativeEnvironmentService implements INativeEnviron
 	}
 
 	get skipBuiltinExtensions(): readonly string[] {
+		// HivemindIDE: Copilot stays in the source tree for upstream merges but is never built,
+		// so running from source would load it unbuilt ("Cannot find module …/dist/extension").
+		const hivemindSkipped = ['GitHub.copilot-chat', 'GitHub.copilot'];
 		const value = env['VSCODE_SKIP_BUILTIN_EXTENSIONS'];
 		if (!value) {
-			return [];
+			return hivemindSkipped;
 		}
-		return value.split(',').map(id => id.trim()).filter(id => id);
+		return [...hivemindSkipped, ...value.split(',').map(id => id.trim()).filter(id => id)];
 	}
 
 	@memoize

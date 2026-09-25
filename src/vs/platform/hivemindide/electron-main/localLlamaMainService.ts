@@ -1,4 +1,9 @@
 /*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/*---------------------------------------------------------------------------------------------
  *  HivemindIDE local models: llama.cpp server manager (main process).
  *
  *  Runs llama.cpp's own `llama-server` as a child process, one per role, bound
@@ -21,6 +26,7 @@ import { Emitter } from '../../../base/common/event.js';
 import { Disposable, toDisposable } from '../../../base/common/lifecycle.js';
 import { delimiter, dirname, join } from '../../../base/common/path.js';
 import { isWindows } from '../../../base/common/platform.js';
+import { removeAnsiEscapeCodes } from '../../../base/common/strings.js';
 import { generateUuid } from '../../../base/common/uuid.js';
 import { findFreePortFaster } from '../../../base/node/ports.js';
 import { extract } from '../../../base/node/zip.js';
@@ -33,14 +39,36 @@ import { ILocalLlamaChatChunk, ILocalLlamaChatOptions, ILocalLlamaDevice, ILocal
 /** Pinned llama.cpp release. Bump the build and every digest together. */
 const LLAMA_CPP_BUILD = 'b11175';
 
-const LLAMA_CPP_ASSETS: { readonly [platformArch: string]: { readonly name: string; readonly sha256: string } } = {
+interface ILlamaCppArchive {
+	readonly name: string;
+	readonly sha256: string;
+}
+
+interface ILlamaCppAsset extends ILlamaCppArchive {
+	/** More archives unpacked into the same folder, such as the CUDA runtime DLLs. */
+	readonly extras?: readonly ILlamaCppArchive[];
+}
+
+/** Vulkan builds on Windows and Linux x64 so NVIDIA, AMD and Intel GPUs are all offload targets; they still run on the CPU without one. */
+const LLAMA_CPP_ASSETS: { readonly [platformArch: string]: ILlamaCppAsset } = {
 	'darwin-arm64': { name: `llama-${LLAMA_CPP_BUILD}-bin-macos-arm64.tar.gz`, sha256: 'd02a894d4e3dac287f23e1b514f3db4090809e99e44c1a75807af1c60bdf7089' },
 	'darwin-x64': { name: `llama-${LLAMA_CPP_BUILD}-bin-macos-x64.tar.gz`, sha256: '36a48fd514d838036e9f478f03ea74f71a630772ef1cfc666536896ceb5e1510' },
-	'linux-x64': { name: `llama-${LLAMA_CPP_BUILD}-bin-ubuntu-x64.tar.gz`, sha256: 'bf4507dd3810a1a203b15a6ba2fbde4d21ab78f11885203cd48cfda1ae003b88' },
+	'linux-x64': { name: `llama-${LLAMA_CPP_BUILD}-bin-ubuntu-vulkan-x64.tar.gz`, sha256: '503a24e76ad80e3867379f6dd84a006bed990a2aeb34d379f24a05f078687063' },
 	'linux-arm64': { name: `llama-${LLAMA_CPP_BUILD}-bin-ubuntu-arm64.tar.gz`, sha256: '4eb31ed978f7d3cd77a203469f4a51009804998b806bc1c4aeeee08e5126c5bb' },
-	'win32-x64': { name: `llama-${LLAMA_CPP_BUILD}-bin-win-cpu-x64.zip`, sha256: '174dcd380f2519ddc48e5ccac183dde246e8579a0b315d3062c3ed4f0889ede1' },
+	'win32-x64': { name: `llama-${LLAMA_CPP_BUILD}-bin-win-vulkan-x64.zip`, sha256: '154a7c99eebb5322bdb5b270cf696780b4fb8743ac2dbb130ce112892b02b447' },
 	'win32-arm64': { name: `llama-${LLAMA_CPP_BUILD}-bin-win-cpu-arm64.zip`, sha256: '2e5551c597bf64cb4ddb0c60c61c493d5c9f3cf28d6f93db13f96fe0876704a1' },
 };
+
+/** Faster builds for machines with an NVIDIA driver new enough to run them; see {@link CUDA_MIN_DRIVER}. */
+const LLAMA_CPP_CUDA_ASSETS: { readonly [platformArch: string]: ILlamaCppAsset } = {
+	'win32-x64': {
+		name: `llama-${LLAMA_CPP_BUILD}-bin-win-cuda-12.4-x64.zip`, sha256: '5c04f711494c4994685eca78b88c52555a3b8e3d542a2e911f4d8c336b22878f',
+		extras: [{ name: 'cudart-llama-bin-win-cuda-12.4-x64.zip', sha256: '8c79a9b226de4b3cacfd1f83d24f962d0773be79f1e7b75c6af4ded7e32ae1d6' }],
+	},
+};
+
+/** Oldest NVIDIA driver (major, minor) that runs the CUDA 12.4 build. */
+const CUDA_MIN_DRIVER = [551, 61] as const;
 
 const SERVER_EXECUTABLE = isWindows ? 'llama-server.exe' : 'llama-server';
 
@@ -72,8 +100,60 @@ const LEAKED_SPECIAL_TOKENS = /<\/?\|?(?:im_end|im_start|eot_id|end_of_text|endo
 /** The start of something that may become a leaked marker once the next chunk arrives. */
 const PARTIAL_SPECIAL_TOKEN = /<\/?\|?[a-z_]*\|?$/;
 
-/** Finder-launched apps get a minimal PATH, so also look where package managers install. */
-const EXTRA_SEARCH_DIRS = isWindows ? [] : ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin'];
+/** A place another install may keep llama-server: the folder itself, or `depth` levels below it. */
+interface IEngineSearchDir {
+	readonly dir: string;
+	readonly depth: number;
+	/** Only subfolders of `dir` whose name starts with this are searched (WinGet names package folders by id). */
+	readonly childPrefix?: string;
+}
+
+/**
+ * Where llama-server is often installed outside PATH: package managers (Finder-launched apps get a minimal PATH)
+ * and apps that ship their own llama.cpp build (Ollama, Jan). Using one of these saves a download.
+ */
+function extraSearchDirs(home: string): IEngineSearchDir[] {
+	const at = (depth: number, ...segments: (string | undefined)[]): IEngineSearchDir[] =>
+		segments.every(s => !!s) ? [{ dir: join(...segments as string[]), depth }] : [];
+	if (isWindows) {
+		const localAppData = process.env.LOCALAPPDATA;
+		return [
+			...at(0, localAppData, 'Programs', 'Ollama', 'lib', 'ollama'),
+			...at(0, localAppData, 'Microsoft', 'WinGet', 'Links'),
+			...(localAppData ? [{ dir: join(localAppData, 'Microsoft', 'WinGet', 'Packages'), depth: 2, childPrefix: 'ggml.llamacpp' }] : []),
+			...at(0, home, 'scoop', 'shims'),
+			...at(1, home, 'scoop', 'apps', 'llama.cpp', 'current'),
+			...at(0, process.env.ProgramData, 'chocolatey', 'bin'),
+			...at(2, process.env.ProgramFiles, 'llama.cpp'),
+			...at(4, process.env.APPDATA, 'Jan', 'data', 'llamacpp', 'backends'),
+		];
+	}
+	if (process.platform === 'darwin') {
+		return [
+			...at(0, '/opt/homebrew/bin'),
+			...at(0, '/usr/local/bin'),
+			...at(0, home, '.local', 'bin'),
+			...at(0, '/Applications/Ollama.app/Contents/Resources'),
+			...at(4, home, 'Library', 'Application Support', 'Jan', 'data', 'llamacpp', 'backends'),
+		];
+	}
+	return [
+		...at(0, '/usr/local/bin'),
+		...at(0, '/usr/bin'),
+		...at(0, home, '.local', 'bin'),
+		...at(0, '/home/linuxbrew/.linuxbrew/bin'),
+		...at(0, '/snap/bin'),
+		...at(0, '/usr/local/lib/ollama'),
+		...at(0, '/usr/lib/ollama'),
+		...at(4, home, '.local', 'share', 'Jan', 'data', 'llamacpp', 'backends'),
+	];
+}
+
+/** Requests the chat server answers at once: enough for the chat plus its sub-agents (see MAX_SUBAGENTS in localChatAgent). */
+const CHAT_SLOTS = 4;
+
+/** How long `--list-devices` may take; CUDA initialisation alone can take a few seconds. */
+const PROBE_TIMEOUT_MS = 20_000;
 
 interface IRunningServer {
 	readonly process: ChildProcess;
@@ -128,6 +208,10 @@ export class LocalLlamaMainService extends Disposable implements ILocalLlamaServ
 	/** Per model file: a smaller context forced by running out of memory, valid while the configured size stays the same. */
 	private readonly contextOverrides = new Map<string, { readonly requested: number; readonly context: number }>();
 	private installing: Promise<ILocalLlamaEngine> | undefined;
+	private readonly probes = new Map<string, Promise<ILocalLlamaDevice[] | undefined>>();
+	/** Per model file: the engine that loaded it after the default one could not read it. */
+	private readonly modelEngines = new Map<string, string>();
+	private preferredAsset: Promise<ILlamaCppAsset | undefined> | undefined;
 
 	constructor(
 		@IEnvironmentMainService private readonly environmentMainService: IEnvironmentMainService,
@@ -161,30 +245,119 @@ export class LocalLlamaMainService extends Disposable implements ILocalLlamaServ
 
 	// ---- Engine ----------------------------------------------------------------
 
-	private get engineRoot(): string {
-		return join(this.environmentMainService.userHome.fsPath, this.productService.dataFolderName, 'llama.cpp', LLAMA_CPP_BUILD);
+	/** One folder per asset, so switching builds (say CPU to CUDA) installs afresh instead of reusing the old engine. */
+	private engineRoot(asset: ILlamaCppAsset): string {
+		return join(this.environmentMainService.userHome.fsPath, this.productService.dataFolderName, 'llama.cpp', asset.name.replace(/\.(zip|tar\.gz)$/, ''));
+	}
+
+	/** The build that suits this machine: CUDA when a recent NVIDIA driver is present, otherwise the default. Detected once per session. */
+	private getPreferredAsset(): Promise<ILlamaCppAsset | undefined> {
+		this.preferredAsset ??= (async () => {
+			const platformArch = `${process.platform}-${process.arch}`;
+			const cuda = LLAMA_CPP_CUDA_ASSETS[platformArch];
+			if (cuda && await hasCudaDriver()) {
+				this.logService.info('[LocalLlama] NVIDIA driver found; using the CUDA build');
+				return cuda;
+			}
+			return LLAMA_CPP_ASSETS[platformArch];
+		})();
+		return this.preferredAsset;
 	}
 
 	async resolveEngine(serverPath?: string): Promise<ILocalLlamaEngine | undefined> {
 		if (serverPath) {
-			if (await isExecutable(serverPath)) {
-				return { path: serverPath, source: 'setting' };
+			// The setting may name the executable or a folder holding it, such as an unpacked llama.cpp release.
+			const path = await isExecutable(serverPath) ? serverPath : await findFile(serverPath, SERVER_EXECUTABLE, 3);
+			if (path && await isExecutable(path)) {
+				return { path, source: 'setting' };
 			}
-			throw new Error(`llama-server not found or not executable at ${serverPath}`);
+			throw new Error(`${SERVER_EXECUTABLE} not found at ${serverPath}`);
 		}
 
-		const managed = await findFile(this.engineRoot, SERVER_EXECUTABLE, 3);
-		if (managed) {
-			return { path: managed, source: 'managed' };
+		// An engine already installed beats a download, but one that sees a GPU beats one that does not:
+		// a CPU-only build runs a large model slowly enough to stall the whole machine.
+		let cpuOnly: ILocalLlamaEngine | undefined;
+		for (const candidate of await this.findEngines()) {
+			const devices = await this.probe(candidate.path);
+			if (!devices) {
+				continue; // does not run here: a broken install, or a build for another CPU or driver
+			}
+			if (devices.length) {
+				return { ...candidate, gpu: true };
+			}
+			cpuOnly ??= candidate;
+		}
+		if (!cpuOnly) {
+			return undefined;
+		}
+		// The CUDA build is only preferred when an NVIDIA driver was found, so preferring it means a GPU sits unused.
+		const gpuBuildAvailable = await this.getPreferredAsset() === LLAMA_CPP_CUDA_ASSETS[`${process.platform}-${process.arch}`];
+		return { ...cpuOnly, gpu: false, gpuBuildAvailable };
+	}
+
+	/** Every llama-server on this machine worth trying, best first: HivemindIDE's own, then PATH, then other apps' installs. */
+	private async findEngines(): Promise<ILocalLlamaEngine[]> {
+		const found: ILocalLlamaEngine[] = [];
+		const seen = new Set<string>();
+		const add = (path: string | undefined, source: ILocalLlamaEngine['source']) => {
+			const key = path && (isWindows ? path.toLowerCase() : path);
+			if (path && key && !seen.has(key)) {
+				seen.add(key);
+				found.push({ path, source });
+			}
+		};
+
+		const preferred = await this.getPreferredAsset();
+		const fallback = LLAMA_CPP_ASSETS[`${process.platform}-${process.arch}`];
+		for (const asset of new Set([preferred, fallback])) {
+			if (asset) {
+				add(await findFile(this.engineRoot(asset), SERVER_EXECUTABLE, 3), 'managed');
+			}
+		}
+		// Engines installed by earlier HivemindIDE versions, whose folders were named differently.
+		const managedRoot = join(this.environmentMainService.userHome.fsPath, this.productService.dataFolderName, 'llama.cpp');
+		for (const entry of await readDir(managedRoot)) {
+			if (entry.isDirectory() && !entry.name.endsWith('.partial')) {
+				add(await findFile(join(managedRoot, entry.name), SERVER_EXECUTABLE, 3), 'managed');
+			}
 		}
 
-		const dirs = [...(process.env.PATH ?? '').split(delimiter), ...EXTRA_SEARCH_DIRS];
-		for (const dir of dirs) {
+		for (const dir of (process.env.PATH ?? '').split(delimiter)) {
 			if (dir && await isExecutable(join(dir, SERVER_EXECUTABLE))) {
-				return { path: join(dir, SERVER_EXECUTABLE), source: 'path' };
+				add(join(dir, SERVER_EXECUTABLE), 'path');
 			}
 		}
-		return undefined;
+		for (const { dir, depth, childPrefix } of extraSearchDirs(this.environmentMainService.userHome.fsPath)) {
+			const roots = childPrefix
+				? (await readDir(dir)).filter(e => e.isDirectory() && e.name.toLowerCase().startsWith(childPrefix)).map(e => join(dir, e.name))
+				: [dir];
+			for (const root of roots) {
+				add(await findFile(root, SERVER_EXECUTABLE, depth), 'path');
+			}
+		}
+		return found;
+	}
+
+	/** The GPUs `path` can offload to, or undefined if it does not run. Cached per file version, since each probe starts the engine. */
+	private async probe(path: string): Promise<ILocalLlamaDevice[] | undefined> {
+		let key: string;
+		try {
+			key = `${path}|${(await fs.stat(path)).mtimeMs}`;
+		} catch {
+			return undefined;
+		}
+		let probe = this.probes.get(key);
+		if (!probe) {
+			probe = listEngineDevices(path).then(devices => {
+				this.logService.info(`[LocalLlama] ${path}: ${devices.length ? devices.map(d => d.name).join(', ') : 'CPU only'}`);
+				return devices;
+			}, err => {
+				this.logService.info(`[LocalLlama] skipping ${path}: ${err instanceof Error ? err.message : err}`);
+				return undefined;
+			});
+			this.probes.set(key, probe);
+		}
+		return probe;
 	}
 
 	installEngine(): Promise<ILocalLlamaEngine> {
@@ -195,44 +368,52 @@ export class LocalLlamaMainService extends Disposable implements ILocalLlamaServ
 	}
 
 	private async doInstallEngine(): Promise<ILocalLlamaEngine> {
-		const asset = LLAMA_CPP_ASSETS[`${process.platform}-${process.arch}`];
+		const asset = await this.getPreferredAsset();
 		if (!asset) {
 			throw new Error(`No prebuilt llama.cpp for ${process.platform}-${process.arch}. Install llama.cpp yourself and set hivemindide.localModels.serverPath.`);
 		}
 
-		const root = this.engineRoot;
+		const root = this.engineRoot(asset);
 		const staging = `${root}.partial`;
-		const archive = join(dirname(root), asset.name);
 		await fs.rm(staging, { recursive: true, force: true });
 		await fs.mkdir(staging, { recursive: true });
 
 		try {
-			const url = `https://github.com/ggml-org/llama.cpp/releases/download/${LLAMA_CPP_BUILD}/${asset.name}`;
-			this.logService.info(`[LocalLlama] downloading ${url}`);
-			const digest = await this.download(url, archive);
-			if (digest !== asset.sha256) {
-				throw new Error(`llama.cpp download failed verification (sha256 ${digest}, expected ${asset.sha256}).`);
+			for (const part of [asset, ...(asset.extras ?? [])]) {
+				const archive = join(dirname(root), part.name);
+				try {
+					const url = `https://github.com/ggml-org/llama.cpp/releases/download/${LLAMA_CPP_BUILD}/${part.name}`;
+					this.logService.info(`[LocalLlama] downloading ${url}`);
+					const digest = await this.download(url, archive);
+					if (digest !== part.sha256) {
+						throw new Error(`llama.cpp download failed verification (sha256 ${digest}, expected ${part.sha256}).`);
+					}
+
+					if (part.name.endsWith('.zip')) {
+						// Not `overwrite`: it empties the folder first, which would delete the archives unpacked before this one.
+						await extract(archive, staging, {}, CancellationToken.None);
+					} else {
+						await run('tar', ['-xzf', archive, '-C', staging]);
+					}
+				} finally {
+					await fs.rm(archive, { force: true });
+				}
 			}
 
-			if (asset.name.endsWith('.zip')) {
-				await extract(archive, staging, { overwrite: true }, CancellationToken.None);
-			} else {
-				await run('tar', ['-xzf', archive, '-C', staging]);
+			// Check before swapping in, so a broken download never replaces a working engine.
+			const staged = await findFile(staging, SERVER_EXECUTABLE, 3);
+			if (!staged) {
+				throw new Error(`The llama.cpp ${LLAMA_CPP_BUILD} archive did not contain ${SERVER_EXECUTABLE}.`);
 			}
 
 			await fs.rm(root, { recursive: true, force: true });
 			await fs.rename(staging, root);
+			const path = join(root, staged.slice(staging.length));
+			this.logService.info(`[LocalLlama] installed ${path}`);
+			return { path, source: 'managed' };
 		} finally {
 			await fs.rm(staging, { recursive: true, force: true });
-			await fs.rm(archive, { force: true });
 		}
-
-		const path = await findFile(root, SERVER_EXECUTABLE, 3);
-		if (!path) {
-			throw new Error(`The llama.cpp ${LLAMA_CPP_BUILD} archive did not contain ${SERVER_EXECUTABLE}.`);
-		}
-		this.logService.info(`[LocalLlama] installed ${path}`);
-		return { path, source: 'managed' };
 	}
 
 	/** Streams `url` to `target`, reporting progress, and returns the sha256 of what was written. */
@@ -303,11 +484,48 @@ export class LocalLlamaMainService extends Disposable implements ILocalLlamaServ
 		if (!await exists(options.modelPath)) {
 			throw new Error(`Model file not found: ${options.modelPath}`);
 		}
-		const engine = await this.resolveEngine(options.serverPath);
+		const engine = await this.engineFor(options);
 		if (!engine) {
 			throw new Error('The llama.cpp engine is not installed.');
 		}
 
+		try {
+			return await this.startWith(role, options, engine);
+		} catch (err) {
+			if (options.serverPath || !cannotReadModel(err)) {
+				throw err;
+			}
+			// Builds differ in the quantisation types and architectures they know (Ollama's
+			// carries some upstream lacks), so another engine on this machine may read the file.
+			const others = (await this.findEngines()).filter(other => other.path !== engine.path);
+			const withGpu = await Promise.all(others.map(async other => ({ other, devices: await this.probe(other.path) })));
+			const runnable = withGpu.filter(c => c.devices).sort((a, b) => Number(b.devices!.length > 0) - Number(a.devices!.length > 0));
+			for (const { other } of runnable) {
+				this.logService.info(`[LocalLlama] ${engine.path} cannot read ${options.modelPath}; trying ${other.path}`);
+				try {
+					const state = await this.startWith(role, options, other);
+					this.modelEngines.set(options.modelPath, other.path);
+					return state;
+				} catch (retryErr) {
+					if (!cannotReadModel(retryErr)) {
+						throw retryErr;
+					}
+				}
+			}
+			throw err;
+		}
+	}
+
+	/** The engine for this model: the user's, the one that last loaded this file, or the best one found. */
+	private async engineFor(options: ILocalLlamaStartOptions): Promise<ILocalLlamaEngine | undefined> {
+		const remembered = !options.serverPath && this.modelEngines.get(options.modelPath);
+		if (remembered && await isExecutable(remembered)) {
+			return { path: remembered, source: 'path' };
+		}
+		return this.resolveEngine(options.serverPath);
+	}
+
+	private async startWith(role: LocalLlamaRole, options: ILocalLlamaStartOptions, engine: ILocalLlamaEngine): Promise<ILocalLlamaServerState> {
 		if (role === 'chat') {
 			this.lastChatOptions = options;
 			const context = this.effectiveContext(options);
@@ -347,10 +565,13 @@ export class LocalLlamaMainService extends Disposable implements ILocalLlamaServ
 			'--api-key', apiKey,
 			// Unset GPU layers let llama.cpp's --fit (on by default) offload only what fits.
 			...(options.gpuLayers >= 0 ? ['--n-gpu-layers', String(options.gpuLayers)] : []),
-			'--parallel', '1',
+			// Chat serves sub-agents at once. One unified KV pool keeps memory at the
+			// configured context and lets any single request use all of it.
+			...(role === 'chat' ? ['--parallel', String(CHAT_SLOTS), '--kv-unified'] : ['--parallel', '1']),
 			'--no-webui',
 			...hardwareArgs(options),
 			...roleArgs,
+			...userArgs(options.extraArgs),
 		];
 
 		this.logService.info(`[LocalLlama] starting ${role} server: ${engine.path} ${args.filter(a => a !== apiKey).join(' ')}`);
@@ -408,7 +629,7 @@ export class LocalLlamaMainService extends Disposable implements ILocalLlamaServ
 
 		while (Date.now() < deadline) {
 			if (exitReason !== undefined) {
-				throw new Error(this.describeFailure(server, exitReason));
+				throw new LlamaStartError(this.describeFailure(server, exitReason), [...server.stderrTail]);
 			}
 			if (this.servers.get(server.state.role) !== server) {
 				throw new Error('llama-server was stopped before it finished loading.');
@@ -799,27 +1020,8 @@ export class LocalLlamaMainService extends Disposable implements ILocalLlamaServ
 
 	async listDevices(serverPath?: string): Promise<ILocalLlamaDevice[]> {
 		const engine = await this.resolveEngine(serverPath);
-		if (!engine) {
-			return [];
-		}
-		const output = await new Promise<string>((resolve, reject) => {
-			const child = spawn(engine.path, ['--list-devices'], { cwd: dirname(engine.path), stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
-			let text = '';
-			child.stdout?.on('data', d => text += d);
-			child.stderr?.on('data', d => text += d);
-			child.once('error', reject);
-			child.once('exit', () => resolve(text));
-		});
-		const devices: ILocalLlamaDevice[] = [];
-		for (const line of output.split('\n')) {
-			// "  MTL0: Apple M3 (12124 MiB, 12123 MiB free)"
-			const match = /^\s+(\S+): (.+?) \((\d+) MiB, (\d+) MiB free\)\s*$/.exec(line);
-			// CPU-side backends (BLAS, CPU) report no memory and are not offload targets.
-			if (match && Number(match[3]) > 0) {
-				devices.push({ id: match[1], name: match[2], totalMiB: Number(match[3]), freeMiB: Number(match[4]) });
-			}
-		}
-		return devices;
+		// Not the cached probe: free memory is what the caller wants, and it changes.
+		return engine ? listEngineDevices(engine.path) : [];
 	}
 
 	async listRemoteModels(url: string, apiKey?: string): Promise<string[]> {
@@ -851,6 +1053,7 @@ export class LocalLlamaMainService extends Disposable implements ILocalLlamaServ
  */
 function errorLines(tail: readonly string[]): string {
 	return tail
+		.map(removeAnsiEscapeCodes) // llama.cpp colors its log; the codes would show as garbage
 		.filter(line => /^\s*[\d.]+\s+E\s/.test(line) || /\berror\b|failed|out of memory|unable to allocate/i.test(line))
 		.slice(-3)
 		.map(line => line.replace(/^\s*[\d.]+\s+[EWI]\s+/, ''))
@@ -881,6 +1084,45 @@ function hardwareArgs(options: ILocalLlamaStartOptions): string[] {
 	}
 	if (options.flashAttention) {
 		args.push('--flash-attn', options.flashAttention);
+	}
+	return args;
+}
+
+/** llama-server exited while starting; carries its log, since the telling line is often not among the last. */
+class LlamaStartError extends Error {
+	constructor(message: string, readonly stderrTail: readonly string[]) {
+		super(message);
+	}
+}
+
+/**
+ * Whether the engine could not make sense of the model file, as opposed to running out of memory
+ * or failing for any other reason another engine would share.
+ */
+function cannotReadModel(err: unknown): boolean {
+	return err instanceof LlamaStartError
+		&& err.stderrTail.some(line => /invalid ggml type|unknown model architecture|unknown pre-tokenizer|failed to read tensor info|unsupported (tensor|model|quant)/i.test(line));
+}
+
+/** Flags HivemindIDE must own to reach the server, each followed by a value. */
+const RESERVED_FLAGS = new Set(['-m', '--model', '--host', '--port', '--api-key', '--api-key-file']);
+
+/** The user's arguments without the reserved flags (in either `--flag value` or `--flag=value` form) or a leading executable. */
+function userArgs(extra: readonly string[] | undefined): string[] {
+	const args: string[] = [];
+	for (let i = 0; i < (extra?.length ?? 0); i++) {
+		const arg = extra![i];
+		if (i === 0 && /(^|[\\/])llama-server(\.exe)?$/i.test(arg)) {
+			continue; // a pasted command line
+		}
+		if (RESERVED_FLAGS.has(arg)) {
+			i++;
+			continue;
+		}
+		if (RESERVED_FLAGS.has(arg.split('=')[0])) {
+			continue;
+		}
+		args.push(arg);
 	}
 	return args;
 }
@@ -929,6 +1171,45 @@ async function isExecutable(path: string): Promise<boolean> {
 	}
 }
 
+/** Runs `llama-server --list-devices`. Rejects if it does not run or never lists devices. */
+function listEngineDevices(path: string): Promise<ILocalLlamaDevice[]> {
+	return new Promise((resolve, reject) => {
+		const child = spawn(path, ['--list-devices'], { cwd: dirname(path), stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+		let text = '';
+		const finish = () => {
+			clearTimeout(timer);
+			if (!/available devices/i.test(text)) {
+				reject(new Error(errorLines(text.split('\n')) || 'it did not list its devices'));
+				return;
+			}
+			const devices: ILocalLlamaDevice[] = [];
+			for (const line of text.split('\n')) {
+				// "  MTL0: Apple M3 (12124 MiB, 12123 MiB free)"
+				const match = /^\s+(\S+): (.+?) \((\d+) MiB, (\d+) MiB free\)\s*$/.exec(line);
+				// CPU-side backends (BLAS, CPU) report no memory and are not offload targets.
+				if (match && Number(match[3]) > 0) {
+					devices.push({ id: match[1], name: match[2], totalMiB: Number(match[3]), freeMiB: Number(match[4]) });
+				}
+			}
+			resolve(devices);
+		};
+		// Some builds carry on starting a server after listing; the list is all that is needed.
+		const timer = setTimeout(() => { child.kill(); finish(); }, PROBE_TIMEOUT_MS);
+		child.stdout?.on('data', d => text += d);
+		child.stderr?.on('data', d => text += d);
+		child.once('error', err => { clearTimeout(timer); reject(err); });
+		child.once('exit', finish);
+	});
+}
+
+async function readDir(dir: string) {
+	try {
+		return await fs.readdir(dir, { withFileTypes: true });
+	} catch {
+		return [];
+	}
+}
+
 async function findFile(root: string, name: string, depth: number): Promise<string | undefined> {
 	let entries;
 	try {
@@ -952,6 +1233,22 @@ async function findFile(root: string, name: string, depth: number): Promise<stri
 		}
 	}
 	return undefined;
+}
+
+/** Whether `nvidia-smi` reports a driver at least {@link CUDA_MIN_DRIVER}. Any failure means no. */
+function hasCudaDriver(): Promise<boolean> {
+	return new Promise(resolve => {
+		const child = spawn('nvidia-smi', ['--query-gpu=driver_version', '--format=csv,noheader'], { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
+		const timer = setTimeout(() => { child.kill(); resolve(false); }, 10_000);
+		let text = '';
+		child.stdout?.on('data', d => text += d);
+		child.once('error', () => { clearTimeout(timer); resolve(false); });
+		child.once('exit', code => {
+			clearTimeout(timer);
+			const [major, minor] = text.trim().split(/\r?\n/)[0].split('.').map(Number);
+			resolve(code === 0 && (major > CUDA_MIN_DRIVER[0] || (major === CUDA_MIN_DRIVER[0] && minor >= CUDA_MIN_DRIVER[1])));
+		});
+	});
 }
 
 function run(command: string, args: string[]): Promise<void> {

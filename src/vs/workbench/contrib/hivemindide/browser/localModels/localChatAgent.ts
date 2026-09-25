@@ -1,4 +1,9 @@
 /*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/*---------------------------------------------------------------------------------------------
  *  HivemindIDE local models: the Chat panel's default agent.
  *
  *  With Copilot stripped there is no default chat participant, so the panel's
@@ -234,7 +239,7 @@ export class LocalChatAgent extends Disposable implements IChatAgentImplementati
 		}
 		const parentNode = parent ? this.hivemindService.getNode(parent) : undefined;
 		return this.hivemindService.createNode({
-			title: parentNode ? `Continue: ${parentNode.title}` : question.split('\n')[0],
+			title: parentNode ? `Continue: ${parentNode.title}` : titleOf(question),
 			goal: question.slice(0, 1000),
 			agent: HIVEMIND_AGENT_NAME,
 			model,
@@ -244,8 +249,8 @@ export class LocalChatAgent extends Disposable implements IChatAgentImplementati
 	}
 
 	/**
-	 * One child node per task, run one after another (one local server). Each child
-	 * is "running" only during its own call, and shows up on the graph as it starts.
+	 * One child node per task, all created up front and run in parallel: the chat
+	 * server has a slot for each (CHAT_SLOTS in localLlamaMainService).
 	 */
 	private async spawnSubagents(model: ILocalModel, question: string, parent: IHivemindNode, progress: (parts: IChatProgress[]) => void, token: CancellationToken): Promise<string> {
 		progress([{ kind: 'progressMessage', content: new MarkdownString(localize('localChat.planningAgents', "Planning sub-agents…")) }]);
@@ -271,44 +276,52 @@ export class LocalChatAgent extends Disposable implements IChatAgentImplementati
 			content: new MarkdownString(`${localize('localChat.spawning', "Spawning {0} agents.", tasks.length)}\n\n${tasks.map(task => `- ${task}`).join('\n')}\n\n`),
 		}]);
 
-		const parts: string[] = [];
-		for (let i = 0; i < tasks.length; i++) {
-			if (token.isCancellationRequested) {
-				break;
-			}
-			const task = tasks[i];
-			const child = await this.hivemindService.createNode({
-				title: task,
+		// Every child is on the graph and running before any answers: the server has a
+		// slot per sub-agent, so they work at the same time rather than taking turns.
+		const children: { task: string; node: IHivemindNode }[] = [];
+		for (const task of tasks) {
+			const node = await this.hivemindService.createNode({
+				title: titleOf(task),
 				goal: task,
 				agent: HIVEMIND_AGENT_NAME,
 				model: model.name,
 				parent: parent.id,
 			});
-			if (!child) {
-				continue;
+			if (node) {
+				this.hivemindService.setRunning(node.id, true);
+				children.push({ task, node });
 			}
-			this.hivemindService.setRunning(child.id, true);
-			progress([{ kind: 'progressMessage', content: new MarkdownString(localize('localChat.agentN', "Agent {0} of {1}: {2}", i + 1, tasks.length, task)) }]);
+		}
+		progress([{ kind: 'progressMessage', content: new MarkdownString(localize('localChat.agentsRunning', "{0} agents working in parallel…", children.length)) }]);
+
+		const parts: string[] = [];
+		await Promise.all(children.map(async ({ task, node }) => {
 			let answer = '';
 			try {
 				answer = await this.complete(model, [
 					textMessage(ChatMessageRole.System, 'You are a sub-agent. Do this task and nothing else. Reply with the result.'),
 					textMessage(ChatMessageRole.User, task),
 				], token);
-				await this.hivemindService.recordTurn(child.id, {
+				await this.hivemindService.recordTurn(node.id, {
 					question: task,
 					answer,
 					files: [],
 					model: model.name,
 					interrupted: token.isCancellationRequested,
 				});
+			} catch (err) {
+				if (!token.isCancellationRequested) {
+					this.logService.warn(`[LocalModels] sub-agent "${node.title}" failed`, err);
+					answer = localize('localChat.agentFailed', "_This agent failed: {0}_", err instanceof Error ? err.message : String(err));
+				}
 			} finally {
-				this.hivemindService.setRunning(child.id, false);
+				this.hivemindService.setRunning(node.id, false);
 			}
+			// Answers arrive in whatever order the agents finish; each section names its task.
 			const section = `## ${task}\n\n${answer}`;
 			parts.push(section);
 			progress([{ kind: 'markdownContent', content: new MarkdownString(`${section}\n\n`) }]);
-		}
+		}));
 		return parts.join('\n\n');
 	}
 
@@ -483,7 +496,7 @@ export class LocalChatAgent extends Disposable implements IChatAgentImplementati
 			const session = request.sessionResource.toString();
 			const parentNode = parent ? this.hivemindService.getNode(parent) : undefined;
 			const node = this.hivemindService.findByChatSession(session) ?? await this.hivemindService.createNode({
-				title: parentNode ? `Continue: ${parentNode.title}` : question.split('\n')[0],
+				title: parentNode ? `Continue: ${parentNode.title}` : titleOf(question),
 				goal: question.slice(0, 1000),
 				agent: HIVEMIND_AGENT_NAME,
 				model,
@@ -568,10 +581,40 @@ function wantsSubagents(message: string): boolean {
 	return /\b(spawn|sub-?agents?|multiple agents)\b/i.test(message);
 }
 
-function parseTasks(text: string): string[] {
-	return text.split('\n')
-		.map(line => /^\s*(?:[-*]|\d+[.)])\s+(\S.*)$/.exec(line)?.[1]?.trim())
-		.filter((task): task is string => !!task && task.length > 2);
+/**
+ * The list items of a plan. Models often wrap the list in a code fence or bold its
+ * items, so fences (and anything inside them) are skipped, emphasis is stripped, and
+ * an item must contain a word: "1. ```" is not a task.
+ */
+export function parseTasks(text: string): string[] {
+	const tasks: string[] = [];
+	let inFence = false;
+	for (const line of text.split('\n')) {
+		if (/^\s*(?:(?:[-*]|\d+[.)])\s+)?(?:```|~~~)/.test(line)) {
+			inFence = !inFence;
+			continue;
+		}
+		if (inFence) {
+			continue;
+		}
+		const task = /^\s*(?:[-*]|\d+[.)])\s+(\S.*)$/.exec(line)?.[1].replace(/\*\*|__|`/g, '').trim();
+		if (task && /\p{L}{3}/u.test(task)) {
+			tasks.push(task);
+		}
+	}
+	return tasks;
+}
+
+/**
+ * A node title from a message: its first line that has words in it, without list
+ * markers, headings or emphasis, cut to a card-sized length. A message that opens
+ * with a code fence would otherwise be titled "```".
+ */
+export function titleOf(text: string): string {
+	const line = text.split('\n')
+		.map(l => l.replace(/^\s*(?:#+|[-*>]|\d+[.)])\s+/, '').replace(/\*\*|__|`/g, '').trim())
+		.find(l => /\p{L}{3}/u.test(l)) ?? oneLine(text);
+	return line.length > 80 ? `${line.slice(0, 79).trimEnd()}…` : line;
 }
 
 function textMessage(role: ChatMessageRole, value: string): IChatMessage {

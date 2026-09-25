@@ -1,4 +1,9 @@
 /*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/*---------------------------------------------------------------------------------------------
  *  HivemindIDE feature configuration.
  *
  *  Every HivemindIDE feature registers its settings here and is gated on a
@@ -35,6 +40,7 @@ export const enum HivemindIDESettings {
 	LocalModelsSplitMode = 'hivemindide.localModels.splitMode',
 	LocalModelsMainGpu = 'hivemindide.localModels.mainGpu',
 	LocalModelsTensorSplit = 'hivemindide.localModels.tensorSplit',
+	LocalModelsModelArgs = 'hivemindide.localModels.modelArgs',
 	LocalModelsThreads = 'hivemindide.localModels.threads',
 	LocalModelsFlashAttention = 'hivemindide.localModels.flashAttention',
 	LocalModelsKeepAliveMinutes = 'hivemindide.localModels.keepAliveMinutes',
@@ -164,7 +170,7 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			type: 'string',
 			default: '',
 			scope: ConfigurationScope.APPLICATION,
-			markdownDescription: localize('hivemindide.localModels.serverPath', "Path to a `llama-server` executable to use instead of the one HivemindIDE installs. Empty uses the managed install, then `llama-server` on your PATH."),
+			markdownDescription: localize('hivemindide.localModels.serverPath', "Path to a `llama-server` executable, or the folder containing it, to use instead of the one HivemindIDE installs. Empty uses the managed install, then one already on this computer (PATH, Ollama, winget, scoop, Homebrew), and installs one only if none is found."),
 			tags: ['hivemindide']
 		},
 		[HivemindIDESettings.LocalModelsWorkspaceContext]: {
@@ -224,6 +230,14 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			default: '',
 			scope: ConfigurationScope.APPLICATION,
 			markdownDescription: localize('hivemindide.localModels.tensorSplit', "Share of the model per GPU, comma-separated in device order (for example `3,1` puts three quarters on the first GPU). Empty splits by free memory."),
+			tags: ['hivemindide']
+		},
+		[HivemindIDESettings.LocalModelsModelArgs]: {
+			type: 'object',
+			additionalProperties: { type: 'string' },
+			default: {},
+			scope: ConfigurationScope.APPLICATION,
+			markdownDescription: localize('hivemindide.localModels.modelArgs', "Extra `llama-server` arguments per model file path, for example `-ngl 99 -c 32768 --jinja --temp 1.0`. They come last, so they override the settings above. `-m`, `--host`, `--port` and `--api-key` are ignored: HivemindIDE sets those itself."),
 			tags: ['hivemindide']
 		},
 		[HivemindIDESettings.LocalModelsThreads]: {

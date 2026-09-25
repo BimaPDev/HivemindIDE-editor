@@ -1,4 +1,9 @@
 /*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/*---------------------------------------------------------------------------------------------
  *  HivemindIDE local models: the workbench's view of the models and the
  *  servers running them.
  *
@@ -75,6 +80,10 @@ export interface ILocalModelsService {
 	removeModel(path: string): Promise<void>;
 	setChatModel(model: ILocalModel): Promise<void>;
 	setEmbeddingModel(model: ILocalModel | undefined): Promise<void>;
+	/** The user's extra `llama-server` arguments for a model file, as typed. */
+	getModelArgs(modelPath: string): string;
+	/** Empty clears them. Takes effect the next time the model starts. */
+	setModelArgs(modelPath: string, args: string): Promise<void>;
 	/** Rescans the models folder and, in remote mode, the remote model list. */
 	refresh(): Promise<void>;
 
@@ -105,6 +114,15 @@ export function toLocalModel(path: string, fromFolder?: boolean): ILocalModel {
 	};
 }
 
+/** Splits a command line the way a shell would for plain arguments: on spaces, keeping quoted runs together. */
+export function splitArgs(text: string): string[] {
+	const args: string[] = [];
+	for (const match of text.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)) {
+		args.push(match[1] ?? match[2] ?? match[3]);
+	}
+	return args;
+}
+
 function toRemoteModel(modelId: string): ILocalModel {
 	return { id: `remote-${(stringHash(modelId, 0) >>> 0).toString(16)}`, name: modelId, path: modelId, remote: true };
 }
@@ -125,6 +143,7 @@ export class LocalModelsService extends Disposable implements ILocalModelsServic
 	private remoteModels: ILocalModel[] = [];
 	private _remoteError: string | undefined;
 	private _modelsFolder: URI | undefined;
+	private gpuInstallFailed = false;
 
 	constructor(
 		@IConfigurationService private readonly configurationService: IConfigurationService,
@@ -413,11 +432,26 @@ export class LocalModelsService extends Disposable implements ILocalModelsServic
 
 	async ensureEngine(): Promise<ILocalLlamaEngine> {
 		const existing = await this.localLlamaService.resolveEngine(this.serverPath);
-		if (existing) {
+		// A CPU-only engine is kept only when a GPU build is not on offer, or already failed to install this session.
+		if (existing && (!existing.gpuBuildAvailable || this.gpuInstallFailed)) {
 			this._engine = existing;
 			return existing;
 		}
+		try {
+			return await this.installEngine();
+		} catch (err) {
+			if (!existing) {
+				throw err;
+			}
+			this.gpuInstallFailed = true;
+			this.logService.warn('[LocalModels] installing the GPU build of llama.cpp failed; using the CPU-only one found', err);
+			this._engine = existing;
+			this._onDidChange.fire();
+			return existing;
+		}
+	}
 
+	private async installEngine(): Promise<ILocalLlamaEngine> {
 		this._engine = await this.progressService.withProgress({
 			location: ProgressLocation.Notification,
 			title: localize('localModels.installing', "Installing the llama.cpp engine"),
@@ -455,7 +489,22 @@ export class LocalModelsService extends Disposable implements ILocalModelsServic
 			flashAttention: get<'auto' | 'on' | 'off'>(HivemindIDESettings.LocalModelsFlashAttention) ?? 'auto',
 			keepAliveMinutes: get<number>(HivemindIDESettings.LocalModelsKeepAliveMinutes) ?? 30,
 			share: share ? { port: get<number>(HivemindIDESettings.LocalModelsSharePort) || 11435, apiKey: await this.getShareApiKey() } : undefined,
+			extraArgs: splitArgs(this.getModelArgs(modelPath)),
 		};
+	}
+
+	getModelArgs(modelPath: string): string {
+		return this.configurationService.getValue<Record<string, string>>(HivemindIDESettings.LocalModelsModelArgs)?.[modelPath] ?? '';
+	}
+
+	async setModelArgs(modelPath: string, args: string): Promise<void> {
+		const next = { ...this.configurationService.getValue<Record<string, string>>(HivemindIDESettings.LocalModelsModelArgs) };
+		if (args.trim()) {
+			next[modelPath] = args.trim();
+		} else {
+			delete next[modelPath];
+		}
+		await this.configurationService.updateValue(HivemindIDESettings.LocalModelsModelArgs, next);
 	}
 
 	async ensureChatServer(model = this.chatModel): Promise<ILocalLlamaServerState> {
@@ -479,6 +528,11 @@ export class LocalModelsService extends Disposable implements ILocalModelsServic
 		}
 		if (model.remote) {
 			return true;
+		}
+		if (model.path === this.chatModel?.path) {
+			// A second copy of the chat model, at full context, can exhaust memory and stall the machine.
+			this.logService.warn('[LocalModels] the search model is the chat model; searching by keyword only');
+			return false;
 		}
 		await this.ensureEngine();
 		await this.localLlamaService.startServer('embedding', await this.startOptions(model.path, 0, false));

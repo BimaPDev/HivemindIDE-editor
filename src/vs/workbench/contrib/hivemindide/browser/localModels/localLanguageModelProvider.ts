@@ -1,4 +1,9 @@
 /*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/*---------------------------------------------------------------------------------------------
  *  HivemindIDE local models: language-model vendor for the chat model picker.
  *
  *  Registers each configured GGUF file as a model under the `hivemindide-local`
@@ -56,10 +61,9 @@ export class LocalLanguageModelProvider extends Disposable implements ILanguageM
 			return [];
 		}
 		const selected = this.localModelsService.chatModel;
-		const embedding = this.localModelsService.embeddingModel;
 		const contextSize = this.localModelsService.contextSize;
+		// The search model stays listed: one model can serve both chat and search.
 		return this.localModelsService.models
-			.filter(model => model.path !== embedding?.path)
 			.map(model => ({
 				identifier: localModelIdentifier(model.id),
 				metadata: {

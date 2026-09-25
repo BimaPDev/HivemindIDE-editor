@@ -195,7 +195,7 @@ LIGHT = dict(
 )
 
 def colors(p):
-	T = 'transparent'
+	T = '#00000000'
 	c = {
 		# base
 		'foreground': p['fg'],

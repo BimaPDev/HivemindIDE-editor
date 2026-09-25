@@ -93,8 +93,14 @@ export function hygiene(some: NodeJS.ReadWriteStream | string[] | undefined, run
 		const product = JSON.parse(file.contents!.toString('utf8'));
 
 		if (product.extensionsGallery) {
-			console.error(`product.json: Contains 'extensionsGallery'`);
-			errorCount++;
+			// Upstream forbids a gallery so Microsoft's marketplace is never published
+			// from this tree. This fork's gallery is Open VSX, which is public.
+			const serviceUrl = product.extensionsGallery.serviceUrl;
+			const openVsx = typeof serviceUrl === 'string' && serviceUrl.startsWith('https://open-vsx.org/');
+			if (!openVsx) {
+				console.error(`product.json: Contains 'extensionsGallery'`);
+				errorCount++;
+			}
 		}
 
 		this.emit('data', file);

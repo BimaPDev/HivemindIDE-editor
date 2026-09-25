@@ -1,4 +1,9 @@
 /*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/*---------------------------------------------------------------------------------------------
  *  HivemindIDE local models: registration.
  *
  *  Desktop-only — llama.cpp runs as a child of the main process — so this file
@@ -244,7 +249,7 @@ registerAction2(class extends Action2 {
 		const commandService = accessor.get(ICommandService);
 		const notificationService = accessor.get(INotificationService);
 
-		const models = localModelsService.models.filter(m => m.path !== localModelsService.embeddingModel?.path);
+		const models = localModelsService.models;
 		if (models.length === 0) {
 			return commandService.executeCommand(LocalModelsCommands.Add);
 		}

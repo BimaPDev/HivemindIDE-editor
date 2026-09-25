@@ -1,4 +1,9 @@
 /*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/*---------------------------------------------------------------------------------------------
  *  HivemindIDE local models: the contract between the workbench and the
  *  llama.cpp server manager in the main process.
  *
@@ -21,8 +26,12 @@ export type LocalLlamaRole = 'chat' | 'embedding';
 export interface ILocalLlamaEngine {
 	/** Absolute path of the `llama-server` executable. */
 	readonly path: string;
-	/** `setting`: the user's serverPath. `managed`: installed by HivemindIDE. `path`: found on PATH. */
+	/** `setting`: the user's serverPath. `managed`: installed by HivemindIDE. `path`: found on PATH or in another app's install (Ollama, Jan, a package manager). */
 	readonly source: 'setting' | 'managed' | 'path';
+	/** Whether this build can offload to a GPU on this machine (it lists one under `--list-devices`). */
+	readonly gpu?: boolean;
+	/** This build is CPU-only, but the machine has a GPU the pinned download could use. */
+	readonly gpuBuildAvailable?: boolean;
 }
 
 export const enum LocalLlamaServerStatus {
@@ -64,6 +73,8 @@ export interface ILocalLlamaStartOptions {
 	readonly keepAliveMinutes?: number;
 	/** Listen on every interface on a fixed port with a fixed key, so other machines can use this server. */
 	readonly share?: { readonly port: number; readonly apiKey: string };
+	/** The user's own arguments for this model, passed last so they override the ones above. */
+	readonly extraArgs?: readonly string[];
 }
 
 /** A GPU (or other accelerator) as llama.cpp reports it. */

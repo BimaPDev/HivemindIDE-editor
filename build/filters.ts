@@ -105,6 +105,10 @@ export const indentationFilter = Object.freeze<string[]>([
 	'!product.overrides.json',
 	'!src/vs/platform/endpoint/common/licenseAgreement.ts',
 
+	// Local MSBuild overrides. A C copyright header would make them invalid XML.
+	'!Directory.Build.props',
+	'!Directory.Build.targets',
+
 	// except specific folders
 	'!test/automation/out/**',
 	'!test/monaco/out/**',
@@ -202,6 +206,7 @@ export const copyrightFilter = Object.freeze<string[]>([
 	'!**/*.provisionprofile',
 	'!build/**/*.init',
 	'!build/darwin/patch-dmg.py',
+	'!extensions/theme-hivemind/build/generate-themes.py',
 	'!build/linux/libcxx-fetcher.*',
 	'!build/npm/gyp/custom-headers/**',
 	'!resources/linux/snap/snapcraft.yaml',

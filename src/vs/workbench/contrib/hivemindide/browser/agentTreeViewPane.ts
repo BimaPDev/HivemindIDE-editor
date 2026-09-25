@@ -1,10 +1,15 @@
 /*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/*---------------------------------------------------------------------------------------------
  *  Native sidebar pane: author+AI root → sub-agent spawn tree.
  *--------------------------------------------------------------------------------------------*/
 
 import './media/agentTree.css';
 import { MutableDisposable, DisposableStore, IDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
-import { basename, dirname, joinPath } from '../../../../base/common/resources.js';
+import { basename, dirname } from '../../../../base/common/resources.js';
 import { URI } from '../../../../base/common/uri.js';
 import { localize } from '../../../../nls.js';
 import { IDialogService } from '../../../../platform/dialogs/common/dialogs.js';

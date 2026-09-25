@@ -1,4 +1,9 @@
 /*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/*---------------------------------------------------------------------------------------------
  *  HivemindIDE local models: the "Local Models" settings section.
  *
  *  Rendered by both the User sidebar's Settings tab and the HivemindIDE
@@ -28,6 +33,7 @@ import { IContextViewService } from '../../../../../platform/contextview/browser
 import { IFileDialogService } from '../../../../../platform/dialogs/common/dialogs.js';
 import { ILocalLlamaDevice, ILocalLlamaService, LocalLlamaServerStatus } from '../../../../../platform/hivemindide/common/localLlama.js';
 import { INotificationService } from '../../../../../platform/notification/common/notification.js';
+import { IQuickInputService } from '../../../../../platform/quickinput/common/quickInput.js';
 import { defaultButtonStyles, defaultCheckboxStyles, defaultInputBoxStyles, defaultSelectBoxStyles } from '../../../../../platform/theme/browser/defaultStyles.js';
 import { HivemindIDESettings } from '../../common/hivemindideConfiguration.js';
 import { IHivemindIDESettingsSection, IHivemindIDESettingsSectionRenderOptions } from '../hivemindideSettingsSections.js';
@@ -57,6 +63,7 @@ export class LocalModelsSettingsSection extends Disposable implements IHivemindI
 		@IFileDialogService private readonly fileDialogService: IFileDialogService,
 		@IClipboardService private readonly clipboardService: IClipboardService,
 		@INotificationService private readonly notificationService: INotificationService,
+		@IQuickInputService private readonly quickInputService: IQuickInputService,
 	) {
 		super();
 	}
@@ -162,7 +169,8 @@ export class LocalModelsSettingsSection extends Disposable implements IHivemindI
 		appendIcon(engineLine, engine ? Codicon.check : Codicon.warning);
 		append(engineLine, $('span')).textContent = engine
 			? localize('lm.engine.ready', "llama.cpp engine: {0}", engine.source === 'managed' ? localize('lm.engine.managed', "installed by HivemindIDE") : engine.path)
-			: localize('lm.engine.missing', "llama.cpp engine not installed yet (installs automatically on first use, ~11 MB).");
+			+ (engine.gpu === false ? ` ${engine.gpuBuildAvailable ? localize('lm.engine.cpuUpgrade', "(CPU only; the GPU build installs with your first chat message)") : localize('lm.engine.cpu', "(CPU only)")}` : '')
+			: localize('lm.engine.missing', "No llama.cpp found on this computer. It installs automatically on first use, or choose your own under Custom llama-server.");
 
 		const model = this.localModelsService.chatModel;
 		const state = this.localModelsService.getServerState('chat');
@@ -226,7 +234,7 @@ export class LocalModelsSettingsSection extends Disposable implements IHivemindI
 		}
 		this.button(append(parent, $('.hivemindide-lm-buttons')), store, localize('lm.models.add', "Add GGUF Model…"), false, () => this.commandService.executeCommand(LOCAL_MODELS_ADD_COMMAND_ID));
 
-		this.number(parent, store, HivemindIDESettings.LocalModelsContextSize, localize('lm.context', "Context size (tokens)"), localize('lm.context.desc', "How much text the model sees at once. Larger uses more memory; 8192 suits most 7–8B models on 16 GB. 0 picks the largest that fits. If the model runs out of memory, this is halved automatically for that model."));
+		this.number(parent, store, HivemindIDESettings.LocalModelsContextSize, localize('lm.context', "Context size (tokens)"), localize('lm.context.desc', "How much text the model sees at once. Larger uses more memory; 8192 suits most 7-8B models on 16 GB. 0 picks the largest that fits. If the model runs out of memory, this is halved automatically for that model."));
 	}
 
 	private renderModelRow(parent: HTMLElement, store: DisposableStore, model: ILocalModel, isChat: boolean, isEmbedding: boolean): void {
@@ -243,14 +251,35 @@ export class LocalModelsSettingsSection extends Disposable implements IHivemindI
 		const path = append(info, $('.hivemindide-lm-model-path'));
 		path.textContent = model.remote ? localize('lm.model.remote', "on the remote server") : model.fromFolder ? localize('lm.model.inFolder', "in models folder") : model.path;
 		path.title = model.path;
+		const args = model.remote ? '' : this.localModelsService.getModelArgs(model.path);
+		if (args) {
+			const argsLine = append(info, $('.hivemindide-lm-model-path'));
+			argsLine.textContent = localize('lm.model.args', "Launch options: {0}", args);
+			argsLine.title = args;
+		}
 
 		const actions = append(row, $('.hivemindide-lm-model-actions'));
 		if (!isChat) {
 			this.link(actions, store, localize('lm.model.useChat', "Use for chat"), () => this.localModelsService.setChatModel(model));
 		}
 		this.link(actions, store, isEmbedding ? localize('lm.model.unsetSearch', "Stop using for search") : localize('lm.model.useSearch', "Use for search"), () => this.localModelsService.setEmbeddingModel(isEmbedding ? undefined : model));
+		if (!model.remote) {
+			this.link(actions, store, localize('lm.model.editArgs', "Launch options…"), () => this.editModelArgs(model));
+		}
 		if (!model.remote && !model.fromFolder) {
 			this.link(actions, store, localize('lm.model.remove', "Remove"), () => this.localModelsService.removeModel(model.path));
+		}
+	}
+
+	private async editModelArgs(model: ILocalModel): Promise<void> {
+		const args = await this.quickInputService.input({
+			title: localize('lm.model.editArgs.title', "Launch Options: {0}", model.name),
+			value: this.localModelsService.getModelArgs(model.path),
+			placeHolder: '-ngl 99 -c 32768 --jinja --temp 1.0 --top-p 0.95 --top-k 20',
+			prompt: localize('lm.model.editArgs.prompt', "Extra llama-server arguments for this model, used the next time it starts. They override the settings on this page. A pasted command line works too: -m, --host, --port and --api-key are ignored. Empty clears them."),
+		});
+		if (args !== undefined) {
+			await this.localModelsService.setModelArgs(model.path, args);
 		}
 	}
 
@@ -312,7 +341,18 @@ export class LocalModelsSettingsSection extends Disposable implements IHivemindI
 		]);
 		this.number(parent, store, HivemindIDESettings.LocalModelsThreads, localize('lm.threads', "CPU threads"), localize('lm.threads.desc', "0 lets llama.cpp decide."));
 		this.number(parent, store, HivemindIDESettings.LocalModelsKeepAliveMinutes, localize('lm.keepAlive', "Unload after idle (minutes)"), localize('lm.keepAlive.desc', "Frees memory when you are not chatting. 0 keeps the model loaded until you stop it."));
-		this.text(parent, store, HivemindIDESettings.LocalModelsServerPath, localize('lm.serverPath', "Custom llama-server"), localize('lm.serverPath.desc', "Path to your own llama-server build (for example one compiled for CUDA or ROCm). Empty uses the one HivemindIDE installs."), '/path/to/llama-server');
+		const serverRow = this.row(parent, localize('lm.serverPath', "Custom llama-server"), localize('lm.serverPath.desc', "Your own llama.cpp: the llama-server executable or the folder it is in. Empty finds one already on this computer (PATH, Ollama, winget, Homebrew), or installs one."));
+		this.input(serverRow, store, HivemindIDESettings.LocalModelsServerPath, 'text', '/path/to/llama.cpp', this.configurationService.getValue<string>(HivemindIDESettings.LocalModelsServerPath) ?? '');
+		const serverButtons = append(serverRow, $('.hivemindide-lm-buttons'));
+		this.button(serverButtons, store, localize('lm.serverPath.browse', "Browse…"), true, async () => {
+			const picked = await this.fileDialogService.showOpenDialog({ canSelectFolders: true, canSelectFiles: false, canSelectMany: false, title: localize('lm.serverPath.pick', "Folder Containing llama-server") });
+			if (picked?.[0]) {
+				await this.configurationService.updateValue(HivemindIDESettings.LocalModelsServerPath, picked[0].fsPath);
+			}
+		});
+		if (this.configurationService.getValue<string>(HivemindIDESettings.LocalModelsServerPath)) {
+			this.button(serverButtons, store, localize('lm.serverPath.clear', "Use Automatic"), true, () => this.configurationService.updateValue(HivemindIDESettings.LocalModelsServerPath, undefined));
+		}
 	}
 
 	private renderSharing(parent: HTMLElement, store: DisposableStore): void {

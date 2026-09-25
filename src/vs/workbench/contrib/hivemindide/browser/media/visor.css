@@ -1,4 +1,9 @@
 /*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/*---------------------------------------------------------------------------------------------
  *  Visor accent gradient — see visor.ts.
  *
  *  Every rule here only adds a background-image or border-image built from the
@@ -86,16 +91,16 @@
 	100% { --hivemind-beam-color: var(--vscode-hivemind-beam1, var(--vscode-chat-inputWorkingBorderColor1)); }
 }
 
-/* :not(.chat-input-anim-restart) keeps upstream's restart toggle in charge, and
- * both motion guards keep the reduced-motion opt-outs in charge. */
-@media (prefers-reduced-motion: no-preference) {
-	.monaco-workbench:not(.monaco-reduce-motion) .interactive-session .chat-input-container.working:not(.chat-input-anim-restart)::before,
-	.monaco-workbench:not(.monaco-reduce-motion) .interactive-session .chat-input-container.working:not(.chat-input-anim-restart)::after {
-		--chat-input-working-border-color1: var(--hivemind-beam-color);
-		animation:
-			chat-input-working-border-spin var(--chat-input-anim-duration) linear infinite,
-			hivemind-beam-cycle calc(var(--chat-input-anim-duration) * 5) linear infinite;
-	}
+/* :not(.chat-input-anim-restart) keeps upstream's restart toggle in charge.
+ * The motion guard is the workbench class, not the prefers-reduced-motion media
+ * query: the class follows `workbench.reduceMotion` (and the OS when it is
+ * `auto`), so turning that setting off brings the animation back. */
+.monaco-workbench:not(.monaco-reduce-motion) .interactive-session .chat-input-container.working:not(.chat-input-anim-restart)::before,
+.monaco-workbench:not(.monaco-reduce-motion) .interactive-session .chat-input-container.working:not(.chat-input-anim-restart)::after {
+	--chat-input-working-border-color1: var(--hivemind-beam-color);
+	animation:
+		chat-input-working-border-spin var(--chat-input-anim-duration) linear infinite,
+		hivemind-beam-cycle calc(var(--chat-input-anim-duration) * 5) linear infinite;
 }
 
 /*
