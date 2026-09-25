@@ -1772,12 +1772,13 @@ export class ChatWidget extends Disposable implements IChatWidget {
 		} else if (this.input.currentModeKind === ChatModeKind.Edit) {
 			title = localize('editsTitle', "Edit in context");
 		} else {
-			title = localize('agentTitle', "Build with Agent");
+			// HivemindIDE: the default agent is a local llama.cpp model, not a cloud agent.
+			title = localize('hivemindideLocalTitle', "Chat with Your Local Model");
 		}
 
 		return {
 			title,
-			message: new MarkdownString(DISCLAIMER),
+			message: new MarkdownString(localize('hivemindideLocalMessage', "Runs on this machine with llama.cpp. Your code never leaves it.") + ' ' + DISCLAIMER),
 			icon: Codicon.chatSparkle,
 			additionalMessage,
 		};

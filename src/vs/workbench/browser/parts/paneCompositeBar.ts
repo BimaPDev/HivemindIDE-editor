@@ -289,6 +289,11 @@ export class PaneCompositeBar extends Disposable {
 		if (viewContainer) {
 
 			// Update the composite bar by adding
+			if (viewContainer.hideFromActivityBar) {
+				this.hideComposite(viewContainer.id);
+				return;
+			}
+
 			this.addComposite(viewContainer);
 			this.compositeBar.activateComposite(viewContainer.id);
 
@@ -433,6 +438,10 @@ export class PaneCompositeBar extends Disposable {
 	private shouldBeHidden(viewContainerOrId: string | ViewContainer, cachedViewContainer?: ICachedViewContainer): boolean {
 		const viewContainer = isString(viewContainerOrId) ? this.getViewContainer(viewContainerOrId) : viewContainerOrId;
 		const viewContainerId = isString(viewContainerOrId) ? viewContainerOrId : viewContainerOrId.id;
+
+		if (viewContainer?.hideFromActivityBar) {
+			return true;
+		}
 
 		if (viewContainer) {
 			if (viewContainer.hideIfEmpty) {

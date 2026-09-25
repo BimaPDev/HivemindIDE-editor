@@ -149,6 +149,8 @@ import { McpGatewayService } from '../../platform/mcp/node/mcpGatewayService.js'
 import { McpGatewayChannel } from '../../platform/mcp/node/mcpGatewayChannel.js';
 import { IWebContentExtractorService } from '../../platform/webContentExtractor/common/webContentExtractor.js';
 import { NativeWebContentExtractorService } from '../../platform/webContentExtractor/electron-main/webContentExtractorService.js';
+import { ILocalLlamaService, LOCAL_LLAMA_CHANNEL_NAME } from '../../platform/hivemindide/common/localLlama.js';
+import { LocalLlamaMainService } from '../../platform/hivemindide/electron-main/localLlamaMainService.js';
 import { AgentNetworkFilterService, IAgentNetworkFilterService } from '../../platform/networkFilter/common/networkFilterService.js';
 import { ITerminalSandboxService, NullTerminalSandboxService } from '../../platform/sandbox/common/terminalSandboxService.js';
 import ErrorTelemetry from '../../platform/telemetry/electron-main/errorTelemetry.js';
@@ -1253,6 +1255,9 @@ export class CodeApplication extends Disposable {
 		services.set(IAgentNetworkFilterService, new SyncDescriptor(AgentNetworkFilterService, undefined, true));
 		services.set(IWebContentExtractorService, new SyncDescriptor(NativeWebContentExtractorService, undefined, false /* proxied to other processes */));
 
+		// HivemindIDE local models (llama.cpp)
+		services.set(ILocalLlamaService, new SyncDescriptor(LocalLlamaMainService, undefined, true));
+
 		// Webview Manager
 		services.set(IWebviewManagerService, new SyncDescriptor(WebviewMainService));
 
@@ -1438,6 +1443,9 @@ export class CodeApplication extends Disposable {
 		// Web Content Extractor
 		const webContentExtractorChannel = ProxyChannel.fromService(accessor.get(IWebContentExtractorService), disposables);
 		mainProcessElectronServer.registerChannel('webContentExtractor', webContentExtractorChannel);
+
+		// HivemindIDE local models (llama.cpp)
+		mainProcessElectronServer.registerChannel(LOCAL_LLAMA_CHANNEL_NAME, ProxyChannel.fromService(accessor.get(ILocalLlamaService), disposables));
 
 		// Workspaces
 		const workspacesChannel = ProxyChannel.fromService(accessor.get(IWorkspacesService), disposables);

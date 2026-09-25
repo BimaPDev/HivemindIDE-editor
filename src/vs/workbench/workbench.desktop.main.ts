@@ -214,6 +214,9 @@ import './contrib/keybindingsExport/electron-browser/keybindingsExport.contribut
 // System-wide (OS global) Keybindings
 import './contrib/keybindings/electron-browser/systemWideKeybindings.contribution.js';
 
+// HivemindIDE (desktop-only features)
+import './contrib/hivemindide/electron-browser/hivemindide.contribution.js';
+
 //#endregion
 
 

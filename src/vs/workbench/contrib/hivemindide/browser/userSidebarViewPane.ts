@@ -25,6 +25,7 @@ import { IViewPaneOptions, ViewPane } from '../../../browser/parts/views/viewPan
 import { IViewDescriptorService } from '../../../common/views.js';
 import { HIVEMINDIDE_CONFIG_SECTION, HivemindIDESettings } from '../common/hivemindideConfiguration.js';
 import { HIVEMINDIDE_USER_VIEW_ID, UserRailState, UserRailTab } from '../common/userSidebar.js';
+import { HivemindIDESettingsSections, SELF_RENDERING_CONFIG_PREFIX } from './hivemindideSettingsSections.js';
 
 interface IRailTab {
 	readonly id: UserRailTab;
@@ -41,16 +42,8 @@ interface IActionRow {
 
 const RAIL_TABS: readonly IRailTab[] = [
 	{ id: 'settings', label: localize('hivemindide.user.rail.settings', "Settings"), icon: Codicon.settingsGear },
-	{ id: 'code', label: localize('hivemindide.user.rail.code', "Code"), icon: Codicon.folderOpened },
+	{ id: 'localAI', label: localize('hivemindide.user.rail.localAI', "Local AI"), icon: Codicon.sparkle },
 	{ id: 'account', label: localize('hivemindide.user.rail.account', "Account"), icon: Codicon.account },
-];
-
-const CODE_ACTIONS: readonly IActionRow[] = [
-	{ label: localize('hivemindide.user.openFolder', "Open Folder"), commandId: 'workbench.action.files.openFolder', icon: Codicon.folderOpened },
-	{ label: localize('hivemindide.user.commandPalette', "Command Palette"), commandId: 'workbench.action.showCommands', icon: Codicon.terminalCmd, hint: '⌘⇧P' },
-	{ label: localize('hivemindide.user.extensions', "Extensions"), commandId: 'workbench.view.extensions', icon: Codicon.extensions },
-	{ label: localize('hivemindide.user.keyboardShortcuts', "Keyboard Shortcuts"), commandId: 'workbench.action.openGlobalKeybindings', icon: Codicon.keyboard },
-	{ label: localize('hivemindide.user.themes', "Color Theme"), commandId: 'workbench.action.selectTheme', icon: Codicon.symbolColor },
 ];
 
 const ACCOUNT_ACTIONS: readonly IActionRow[] = [
@@ -65,6 +58,7 @@ export class UserSidebarViewPane extends ViewPane {
 	private railEl: HTMLElement | undefined;
 	private contentEl: HTMLElement | undefined;
 	private readonly contentStore = this._register(new MutableDisposable<DisposableStore>());
+	private readonly railStore = this._register(new MutableDisposable<DisposableStore>());
 
 	constructor(
 		options: IViewPaneOptions,
@@ -82,12 +76,16 @@ export class UserSidebarViewPane extends ViewPane {
 	) {
 		super(options, keybindingService, contextMenuService, configurationService, contextKeyService, viewDescriptorService, instantiationService, openerService, themeService, hoverService);
 
+		this._register(HivemindIDESettingsSections.onDidChange(() => {
+			this.renderRail();
+			this.renderContent();
+		}));
 		this._register(UserRailState.onDidChangeTab(() => {
 			this.renderRail();
 			this.renderContent();
 		}));
 		this._register(this.configurationService.onDidChangeConfiguration(e => {
-			if (e.affectsConfiguration(HIVEMINDIDE_CONFIG_SECTION) && UserRailState.tab === 'settings') {
+			if (e.affectsConfiguration(HIVEMINDIDE_CONFIG_SECTION) && !e.affectsConfiguration(SELF_RENDERING_CONFIG_PREFIX) && UserRailState.tab === 'settings') {
 				this.renderContent();
 			}
 		}));
@@ -115,8 +113,12 @@ export class UserSidebarViewPane extends ViewPane {
 			return;
 		}
 		clearNode(this.railEl);
+		const store = new DisposableStore();
+		this.railStore.value = store;
 
-		for (const tab of RAIL_TABS) {
+		// Local AI only exists where a section provides it (desktop builds).
+		const tabs = RAIL_TABS.filter(tab => tab.id !== 'localAI' || HivemindIDESettingsSections.sections.length > 0);
+		for (const tab of tabs) {
 			const btn = append(this.railEl, $('button.hivemindide-user-rail-btn')) as HTMLButtonElement;
 			btn.type = 'button';
 			btn.title = tab.label;
@@ -136,7 +138,7 @@ export class UserSidebarViewPane extends ViewPane {
 				UserRailState.setTab(tab.id);
 			};
 			btn.addEventListener('click', listener);
-			this._register({ dispose: () => btn.removeEventListener('click', listener) });
+			store.add({ dispose: () => btn.removeEventListener('click', listener) });
 		}
 
 		append(this.railEl, $('.hivemindide-user-rail-spacer'));
@@ -155,14 +157,8 @@ export class UserSidebarViewPane extends ViewPane {
 			case 'settings':
 				this.renderSettingsContent(this.contentEl, store);
 				break;
-			case 'code':
-				this.renderActionsContent(
-					this.contentEl,
-					store,
-					localize('hivemindide.user.codeTitle', "Code"),
-					localize('hivemindide.user.codeSubtitle', "Folders, commands, and editor chrome."),
-					CODE_ACTIONS,
-				);
+			case 'localAI':
+				this.renderLocalAIContent(this.contentEl, store);
 				break;
 			case 'account':
 				this.renderActionsContent(
@@ -200,7 +196,23 @@ export class UserSidebarViewPane extends ViewPane {
 		this.renderBooleanSetting(parent, store, HivemindIDESettings.AgentTreeEnabled, localize('hivemindide.settings.agents.enabled', "Show Agents sidebar"), localize('hivemindide.agentTree.enabled', "Show the HivemindIDE Agents sidebar with the author+AI spawn tree."));
 		this.renderStringSetting(parent, store, HivemindIDESettings.AgentTreeCoordinationUrl, localize('hivemindide.settings.agents.url', "Coordination URL"), localize('hivemindide.agentTree.coordinationUrl', "Base URL of coordinationd."));
 		this.renderStringSetting(parent, store, HivemindIDESettings.AgentTreeRepoId, localize('hivemindide.settings.agents.repoId', "Repo ID"), localize('hivemindide.agentTree.repoId', "Repo ID passed to coordinationd."));
-		this.renderBooleanSetting(parent, store, HivemindIDESettings.AgentTreeDemoMode, localize('hivemindide.settings.agents.demo', "Demo mode"), localize('hivemindide.agentTree.demoMode', "Show a mock author+AI spawn tree when coordinationd has not yet emitted agent frames."));
+
+		append(parent, $('.hivemindide-user-section-label')).textContent =
+			localize('hivemindide.settings.section.hivemind', "Hivemind");
+		this.renderBooleanSetting(parent, store, HivemindIDESettings.HivemindEnabled, localize('hivemindide.settings.hivemind.enabled', "Keep a .hivemind folder in each project"), localize('hivemindide.settings.hivemind.enabledDesc', "Shared memory any AI (and any teammate's AI) reads before starting and writes to when it stops, so work picks up where it left off. Only trusted workspaces get one."));
+		this.renderBooleanSetting(parent, store, HivemindIDESettings.HivemindAgentPointers, localize('hivemindide.settings.hivemind.pointers', "Point other AIs to it"), localize('hivemindide.settings.hivemind.pointersDesc', "Add a short managed block to AGENTS.md and CLAUDE.md so Claude Code, Codex, Cursor and Copilot use .hivemind too."));
+		this.renderBooleanSetting(parent, store, HivemindIDESettings.HivemindIncludeInChat, localize('hivemindide.settings.hivemind.chat', "Give the chat AI recent hivemind work"), localize('hivemindide.settings.hivemind.chatDesc', "Include the project notes and the latest nodes with every chat message."));
+		this.renderStringSetting(parent, store, HivemindIDESettings.HivemindAuthor, localize('hivemindide.settings.hivemind.author', "Your name on nodes"), localize('hivemindide.settings.hivemind.authorDesc', "So teammates can tell whose AI did what. Empty uses your account name."));
+	}
+
+	private renderLocalAIContent(parent: HTMLElement, store: DisposableStore): void {
+		append(parent, $('h2.hivemindide-user-content-title')).textContent =
+			localize('hivemindide.user.localAITitle', "Local AI");
+		append(parent, $('p.hivemindide-user-content-subtitle')).textContent =
+			localize('hivemindide.user.localAISubtitle', "Run models with llama.cpp in the Chat panel — on this computer, or on another one.");
+		for (const section of HivemindIDESettingsSections.sections) {
+			store.add(this.instantiationService.createInstance(section.ctor)).render(parent, { standalone: true });
+		}
 	}
 
 	private renderActionsContent(parent: HTMLElement, store: DisposableStore, title: string, subtitle: string, actions: readonly IActionRow[]): void {

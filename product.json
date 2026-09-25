@@ -212,34 +212,46 @@
 	],
 	"onboardingThemes": [
 		{
-			"id": "catppuccin-macchiato",
-			"label": "Catppuccin Macchiato",
-			"themeId": "Catppuccin Macchiato",
+			"id": "hivemind-dynamic",
+			"label": "Hivemind Dynamic",
+			"themeId": "Hivemind Dynamic",
 			"type": "dark"
 		},
 		{
-			"id": "catppuccin-mocha",
-			"label": "Catppuccin Mocha",
-			"themeId": "Catppuccin Mocha",
+			"id": "hivemind-ember",
+			"label": "Hivemind Ember",
+			"themeId": "Hivemind Ember",
 			"type": "dark"
 		},
 		{
-			"id": "hc-dark",
-			"label": "Dark High Contrast",
-			"themeId": "Default High Contrast",
-			"type": "hcDark"
+			"id": "hivemind-jade",
+			"label": "Hivemind Jade",
+			"themeId": "Hivemind Jade",
+			"type": "dark"
 		},
 		{
-			"id": "catppuccin-latte",
-			"label": "Catppuccin Latte",
-			"themeId": "Catppuccin Latte",
+			"id": "hivemind-cobalt",
+			"label": "Hivemind Cobalt",
+			"themeId": "Hivemind Cobalt",
+			"type": "dark"
+		},
+		{
+			"id": "hivemind-violet",
+			"label": "Hivemind Violet",
+			"themeId": "Hivemind Violet",
+			"type": "dark"
+		},
+		{
+			"id": "hivemind-chrome",
+			"label": "Hivemind Chrome",
+			"themeId": "Hivemind Chrome",
+			"type": "dark"
+		},
+		{
+			"id": "hivemind-light",
+			"label": "Hivemind Light",
+			"themeId": "Hivemind Light",
 			"type": "light"
-		},
-		{
-			"id": "hc-light",
-			"label": "Light High Contrast",
-			"themeId": "Default High Contrast Light",
-			"type": "hcLight"
 		}
 	],
 	"sessionsWindowAllowedExtensions": [],

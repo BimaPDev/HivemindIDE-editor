@@ -13,7 +13,7 @@ import { Registry } from '../../../../platform/registry/common/platform.js';
 import { ViewPaneContainer } from '../../../browser/parts/views/viewPaneContainer.js';
 import { Extensions as ViewExtensions, IViewContainersRegistry, IViewsRegistry, ViewContainerLocation } from '../../../common/views.js';
 import { IViewsService } from '../../../services/views/common/viewsService.js';
-import { HIVEMINDIDE_AGENT_TREE_VIEW_ID, HIVEMINDIDE_VIEWLET_ID } from '../common/agentTree.js';
+import { HIVEMINDIDE_AGENT_TREE_VIEW_ID, HIVEMINDIDE_DELETE_AGENT_NODE_COMMAND, HIVEMINDIDE_KILL_AGENT_NODE_COMMAND, HIVEMINDIDE_OPEN_AGENT_NODE_COMMAND, HIVEMINDIDE_VIEWLET_ID } from '../common/agentTree.js';
 import { HivemindIDESettings } from '../common/hivemindideConfiguration.js';
 import { AgentTreeViewPane } from './agentTreeViewPane.js';
 import { hivemindideAgentTreeRefreshIcon, hivemindideViewIcon } from './agentTreeIcons.js';
@@ -95,5 +95,82 @@ registerAction2(class extends Action2 {
 		if (view instanceof AgentTreeViewPane) {
 			view.resample();
 		}
+	}
+});
+
+registerAction2(class extends Action2 {
+	constructor() {
+		super({
+			id: HIVEMINDIDE_OPEN_AGENT_NODE_COMMAND,
+			title: localize2('hivemindide.agentTree.openNode', 'Open Agent Review'),
+			category: localize2('hivemindide.category', 'HivemindIDE'),
+			f1: false,
+		});
+	}
+
+	async run(accessor: ServicesAccessor, nodeId?: string): Promise<void> {
+		if (!nodeId) {
+			return;
+		}
+		const views = accessor.get(IViewsService);
+		let view = views.getActiveViewWithId(HIVEMINDIDE_AGENT_TREE_VIEW_ID);
+		if (!(view instanceof AgentTreeViewPane)) {
+			view = await views.openView(HIVEMINDIDE_AGENT_TREE_VIEW_ID, false);
+		}
+		if (view instanceof AgentTreeViewPane) {
+			view.openNode(nodeId);
+		}
+	}
+});
+
+registerAction2(class extends Action2 {
+	constructor() {
+		super({
+			id: HIVEMINDIDE_KILL_AGENT_NODE_COMMAND,
+			title: localize2('hivemindide.agentTree.killNode', 'Kill Agent Run'),
+			category: localize2('hivemindide.category', 'HivemindIDE'),
+			f1: false,
+		});
+	}
+
+	async run(accessor: ServicesAccessor, nodeId?: string) {
+		if (!nodeId) {
+			return undefined;
+		}
+		const views = accessor.get(IViewsService);
+		let view = views.getActiveViewWithId(HIVEMINDIDE_AGENT_TREE_VIEW_ID);
+		if (!(view instanceof AgentTreeViewPane)) {
+			view = await views.openView(HIVEMINDIDE_AGENT_TREE_VIEW_ID, false);
+		}
+		if (view instanceof AgentTreeViewPane) {
+			return view.killNode(nodeId);
+		}
+		return undefined;
+	}
+});
+
+registerAction2(class extends Action2 {
+	constructor() {
+		super({
+			id: HIVEMINDIDE_DELETE_AGENT_NODE_COMMAND,
+			title: localize2('hivemindide.agentTree.deleteNode', 'Delete Agent Node'),
+			category: localize2('hivemindide.category', 'HivemindIDE'),
+			f1: false,
+		});
+	}
+
+	async run(accessor: ServicesAccessor, nodeId?: string): Promise<boolean> {
+		if (!nodeId) {
+			return false;
+		}
+		const views = accessor.get(IViewsService);
+		let view = views.getActiveViewWithId(HIVEMINDIDE_AGENT_TREE_VIEW_ID);
+		if (!(view instanceof AgentTreeViewPane)) {
+			view = await views.openView(HIVEMINDIDE_AGENT_TREE_VIEW_ID, false);
+		}
+		if (view instanceof AgentTreeViewPane) {
+			return view.deleteNode(nodeId);
+		}
+		return false;
 	}
 });

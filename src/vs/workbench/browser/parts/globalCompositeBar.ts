@@ -248,7 +248,7 @@ abstract class AbstractGlobalActivityActionViewItem extends CompositeBarActionVi
 		return this.contextMenuActionsProvider();
 	}
 
-	private async run(): Promise<void> {
+	protected async run(): Promise<void> {
 		const disposables = new DisposableStore();
 		const menu = disposables.add(this.menuService.createMenu(this.menuId, this.contextKeyService));
 		const actions = await this.resolveMainMenuActions(menu, disposables);
@@ -707,6 +707,7 @@ export class GlobalActivityActionViewItem extends AbstractGlobalActivityActionVi
 		@IKeybindingService keybindingService: IKeybindingService,
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IActivityService activityService: IActivityService,
+		@ICommandService private readonly commandService: ICommandService,
 	) {
 		const action = instantiationService.createInstance(CompositeBarAction, {
 			id: GLOBAL_ACTIVITY_ID,
@@ -721,6 +722,13 @@ export class GlobalActivityActionViewItem extends AbstractGlobalActivityActionVi
 				classNames: ThemeIcon.asClassNameArray(userDataProfileService.currentProfile.icon ? ThemeIcon.fromId(userDataProfileService.currentProfile.icon) : DEFAULT_ICON)
 			};
 		}));
+	}
+
+	// HivemindIDE: the gear opens the User sidebar on its Settings tab instead
+	// of the Manage menu. Command id is a string because workbench/browser must
+	// not import from contrib/.
+	protected override async run(): Promise<void> {
+		await this.commandService.executeCommand('hivemindide.user.openSettings');
 	}
 
 	override render(container: HTMLElement): void {
@@ -820,7 +828,8 @@ export class SimpleGlobalActivityActionViewItem extends GlobalActivityActionView
 		@IKeybindingService keybindingService: IKeybindingService,
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IActivityService activityService: IActivityService,
-		@IStorageService storageService: IStorageService
+		@IStorageService storageService: IStorageService,
+		@ICommandService commandService: ICommandService,
 	) {
 		super(() => simpleActivityContextMenuActions(storageService, false),
 			{
@@ -831,7 +840,7 @@ export class SimpleGlobalActivityActionViewItem extends GlobalActivityActionView
 				}),
 				hoverOptions,
 				compact: true,
-			}, () => undefined, userDataProfileService, themeService, hoverService, menuService, contextMenuService, contextKeyService, configurationService, environmentService, keybindingService, instantiationService, activityService);
+			}, () => undefined, userDataProfileService, themeService, hoverService, menuService, contextMenuService, contextKeyService, configurationService, environmentService, keybindingService, instantiationService, activityService, commandService);
 	}
 }
 

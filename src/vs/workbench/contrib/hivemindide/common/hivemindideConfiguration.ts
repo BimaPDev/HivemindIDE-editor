@@ -21,7 +21,33 @@ export const enum HivemindIDESettings {
 	AgentTreeEnabled = 'hivemindide.agentTree.enabled',
 	AgentTreeCoordinationUrl = 'hivemindide.agentTree.coordinationUrl',
 	AgentTreeRepoId = 'hivemindide.agentTree.repoId',
-	AgentTreeDemoMode = 'hivemindide.agentTree.demoMode',
+	LocalModelsEnabled = 'hivemindide.localModels.enabled',
+	LocalModelsModels = 'hivemindide.localModels.models',
+	LocalModelsChatModel = 'hivemindide.localModels.chatModel',
+	LocalModelsEmbeddingModel = 'hivemindide.localModels.embeddingModel',
+	LocalModelsContextSize = 'hivemindide.localModels.contextSize',
+	LocalModelsGpuLayers = 'hivemindide.localModels.gpuLayers',
+	LocalModelsServerPath = 'hivemindide.localModels.serverPath',
+	LocalModelsWorkspaceContext = 'hivemindide.localModels.workspaceContext',
+	LocalModelsMaxContextChunks = 'hivemindide.localModels.maxContextChunks',
+	LocalModelsModelsFolder = 'hivemindide.localModels.modelsFolder',
+	LocalModelsDevices = 'hivemindide.localModels.devices',
+	LocalModelsSplitMode = 'hivemindide.localModels.splitMode',
+	LocalModelsMainGpu = 'hivemindide.localModels.mainGpu',
+	LocalModelsTensorSplit = 'hivemindide.localModels.tensorSplit',
+	LocalModelsThreads = 'hivemindide.localModels.threads',
+	LocalModelsFlashAttention = 'hivemindide.localModels.flashAttention',
+	LocalModelsKeepAliveMinutes = 'hivemindide.localModels.keepAliveMinutes',
+	LocalModelsEndpoint = 'hivemindide.localModels.endpoint',
+	LocalModelsRemoteUrl = 'hivemindide.localModels.remoteUrl',
+	LocalModelsRemoteChatModel = 'hivemindide.localModels.remoteChatModel',
+	LocalModelsRemoteEmbeddingModel = 'hivemindide.localModels.remoteEmbeddingModel',
+	LocalModelsShareOnNetwork = 'hivemindide.localModels.shareOnNetwork',
+	LocalModelsSharePort = 'hivemindide.localModels.sharePort',
+	HivemindEnabled = 'hivemindide.hivemind.enabled',
+	HivemindAgentPointers = 'hivemindide.hivemind.agentPointers',
+	HivemindAuthor = 'hivemindide.hivemind.author',
+	HivemindIncludeInChat = 'hivemindide.hivemind.includeInChat',
 }
 
 Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerConfiguration({
@@ -85,11 +111,220 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			description: localize('hivemindide.agentTree.repoId', "Repo ID passed to coordinationd for the agent tree stream. Use the seeded demo id, or your own."),
 			tags: ['hivemindide']
 		},
-		[HivemindIDESettings.AgentTreeDemoMode]: {
+		// Local models: every setting is APPLICATION scope. They start processes
+		// and read model files from disk, so a cloned repo's .vscode/settings.json
+		// must never be able to point them somewhere else.
+		[HivemindIDESettings.LocalModelsEnabled]: {
 			type: 'boolean',
 			default: true,
 			scope: ConfigurationScope.APPLICATION,
-			description: localize('hivemindide.agentTree.demoMode', "Show a mock author+AI spawn tree when coordinationd has not yet emitted agent.* frames. Live frames always win."),
+			description: localize('hivemindide.localModels.enabled', "Run GGUF models locally with llama.cpp and use them in the Chat panel. Turning this off stops any running llama.cpp server."),
+			tags: ['hivemindide']
+		},
+		[HivemindIDESettings.LocalModelsModels]: {
+			type: 'array',
+			items: { type: 'string' },
+			default: [],
+			scope: ConfigurationScope.APPLICATION,
+			description: localize('hivemindide.localModels.models', "Absolute paths of the .gguf model files available to HivemindIDE."),
+			tags: ['hivemindide']
+		},
+		[HivemindIDESettings.LocalModelsChatModel]: {
+			type: 'string',
+			default: '',
+			scope: ConfigurationScope.APPLICATION,
+			description: localize('hivemindide.localModels.chatModel', "Path of the .gguf model used for chat. Empty uses the first model in the list."),
+			tags: ['hivemindide']
+		},
+		[HivemindIDESettings.LocalModelsEmbeddingModel]: {
+			type: 'string',
+			default: '',
+			scope: ConfigurationScope.APPLICATION,
+			markdownDescription: localize('hivemindide.localModels.embeddingModel', "Path of a .gguf embedding model (for example `nomic-embed-text`) used to search the workspace by meaning. Empty falls back to keyword search."),
+			tags: ['hivemindide']
+		},
+		[HivemindIDESettings.LocalModelsContextSize]: {
+			type: 'number',
+			default: 8192,
+			minimum: 0,
+			maximum: 262144,
+			scope: ConfigurationScope.APPLICATION,
+			description: localize('hivemindide.localModels.contextSize', "Context window, in tokens, the chat model is started with. Larger windows use more memory. 0 lets llama.cpp choose the largest that fits in memory. If the model runs out of memory, HivemindIDE halves it automatically for that model."),
+			tags: ['hivemindide']
+		},
+		[HivemindIDESettings.LocalModelsGpuLayers]: {
+			type: 'number',
+			default: -1,
+			minimum: -1,
+			scope: ConfigurationScope.APPLICATION,
+			description: localize('hivemindide.localModels.gpuLayers', "Number of model layers offloaded to the GPU. -1 lets llama.cpp put as many as fit in GPU memory (recommended); 999 forces everything onto the GPU; 0 runs on the CPU only."),
+			tags: ['hivemindide']
+		},
+		[HivemindIDESettings.LocalModelsServerPath]: {
+			type: 'string',
+			default: '',
+			scope: ConfigurationScope.APPLICATION,
+			markdownDescription: localize('hivemindide.localModels.serverPath', "Path to a `llama-server` executable to use instead of the one HivemindIDE installs. Empty uses the managed install, then `llama-server` on your PATH."),
+			tags: ['hivemindide']
+		},
+		[HivemindIDESettings.LocalModelsWorkspaceContext]: {
+			type: 'boolean',
+			default: true,
+			scope: ConfigurationScope.APPLICATION,
+			description: localize('hivemindide.localModels.workspaceContext', "Index the open workspace and add the most relevant code to each chat request."),
+			tags: ['hivemindide']
+		},
+		[HivemindIDESettings.LocalModelsMaxContextChunks]: {
+			type: 'number',
+			default: 6,
+			minimum: 0,
+			maximum: 30,
+			scope: ConfigurationScope.APPLICATION,
+			description: localize('hivemindide.localModels.maxContextChunks', "Maximum number of workspace snippets added to each chat request."),
+			tags: ['hivemindide']
+		},
+		[HivemindIDESettings.LocalModelsModelsFolder]: {
+			type: 'string',
+			default: '',
+			scope: ConfigurationScope.APPLICATION,
+			markdownDescription: localize('hivemindide.localModels.modelsFolder', "Folder scanned for `.gguf` models; every model in it is available without adding it by hand. Empty uses `~/.hivemindide/models`."),
+			tags: ['hivemindide']
+		},
+		[HivemindIDESettings.LocalModelsDevices]: {
+			type: 'array',
+			items: { type: 'string' },
+			default: [],
+			scope: ConfigurationScope.APPLICATION,
+			markdownDescription: localize('hivemindide.localModels.devices', "GPUs to run models on, by llama.cpp device id (for example `CUDA0`, `MTL0`). Empty uses every available GPU."),
+			tags: ['hivemindide']
+		},
+		[HivemindIDESettings.LocalModelsSplitMode]: {
+			type: 'string',
+			enum: ['layer', 'row', 'none'],
+			enumDescriptions: [
+				localize('hivemindide.localModels.splitMode.layer', "Spread layers across the GPUs. Best default for several GPUs."),
+				localize('hivemindide.localModels.splitMode.row', "Split each layer's tensors across the GPUs. Can be faster on fast interconnects."),
+				localize('hivemindide.localModels.splitMode.none', "Use only the main GPU."),
+			],
+			default: 'layer',
+			scope: ConfigurationScope.APPLICATION,
+			description: localize('hivemindide.localModels.splitMode', "How a model is split when more than one GPU is used."),
+			tags: ['hivemindide']
+		},
+		[HivemindIDESettings.LocalModelsMainGpu]: {
+			type: 'number',
+			default: 0,
+			minimum: 0,
+			scope: ConfigurationScope.APPLICATION,
+			description: localize('hivemindide.localModels.mainGpu', "Index of the GPU used for the whole model when split mode is none, or for intermediate results when it is row."),
+			tags: ['hivemindide']
+		},
+		[HivemindIDESettings.LocalModelsTensorSplit]: {
+			type: 'string',
+			default: '',
+			scope: ConfigurationScope.APPLICATION,
+			markdownDescription: localize('hivemindide.localModels.tensorSplit', "Share of the model per GPU, comma-separated in device order (for example `3,1` puts three quarters on the first GPU). Empty splits by free memory."),
+			tags: ['hivemindide']
+		},
+		[HivemindIDESettings.LocalModelsThreads]: {
+			type: 'number',
+			default: 0,
+			minimum: 0,
+			scope: ConfigurationScope.APPLICATION,
+			description: localize('hivemindide.localModels.threads', "CPU threads used for generation. 0 lets llama.cpp decide."),
+			tags: ['hivemindide']
+		},
+		[HivemindIDESettings.LocalModelsFlashAttention]: {
+			type: 'string',
+			enum: ['auto', 'on', 'off'],
+			default: 'auto',
+			scope: ConfigurationScope.APPLICATION,
+			description: localize('hivemindide.localModels.flashAttention', "Flash attention. Faster and lighter on memory where the GPU supports it."),
+			tags: ['hivemindide']
+		},
+		[HivemindIDESettings.LocalModelsKeepAliveMinutes]: {
+			type: 'number',
+			default: 30,
+			minimum: 0,
+			scope: ConfigurationScope.APPLICATION,
+			description: localize('hivemindide.localModels.keepAliveMinutes', "Unload a model after this many idle minutes to free memory. 0 keeps it loaded until you stop it."),
+			tags: ['hivemindide']
+		},
+		[HivemindIDESettings.LocalModelsEndpoint]: {
+			type: 'string',
+			enum: ['local', 'remote'],
+			enumDescriptions: [
+				localize('hivemindide.localModels.endpoint.local', "Run models on this machine with llama.cpp."),
+				localize('hivemindide.localModels.endpoint.remote', "Use an OpenAI-compatible server on another machine (llama.cpp, Ollama, LM Studio, or another HivemindIDE sharing its models)."),
+			],
+			default: 'local',
+			scope: ConfigurationScope.APPLICATION,
+			description: localize('hivemindide.localModels.endpoint', "Where chat models run."),
+			tags: ['hivemindide']
+		},
+		[HivemindIDESettings.LocalModelsRemoteUrl]: {
+			type: 'string',
+			default: '',
+			scope: ConfigurationScope.APPLICATION,
+			markdownDescription: localize('hivemindide.localModels.remoteUrl', "Base URL of the remote server, for example `http://192.168.1.20:8080` (llama.cpp) or `http://192.168.1.20:11434` (Ollama). Its API key is kept in secure storage, not in settings."),
+			tags: ['hivemindide']
+		},
+		[HivemindIDESettings.LocalModelsRemoteChatModel]: {
+			type: 'string',
+			default: '',
+			scope: ConfigurationScope.APPLICATION,
+			description: localize('hivemindide.localModels.remoteChatModel', "Model id on the remote server used for chat. Empty uses the first model it lists."),
+			tags: ['hivemindide']
+		},
+		[HivemindIDESettings.LocalModelsRemoteEmbeddingModel]: {
+			type: 'string',
+			default: '',
+			scope: ConfigurationScope.APPLICATION,
+			description: localize('hivemindide.localModels.remoteEmbeddingModel', "Model id on the remote server used for workspace search. Empty falls back to keyword search."),
+			tags: ['hivemindide']
+		},
+		[HivemindIDESettings.LocalModelsShareOnNetwork]: {
+			type: 'boolean',
+			default: false,
+			scope: ConfigurationScope.APPLICATION,
+			description: localize('hivemindide.localModels.shareOnNetwork', "Serve this machine's chat model to other computers on the network, protected by an API key. Other machines connect to it as a remote server."),
+			tags: ['hivemindide']
+		},
+		[HivemindIDESettings.LocalModelsSharePort]: {
+			type: 'number',
+			default: 11435,
+			minimum: 1024,
+			maximum: 65535,
+			scope: ConfigurationScope.APPLICATION,
+			description: localize('hivemindide.localModels.sharePort', "Port the shared model listens on."),
+			tags: ['hivemindide']
+		},
+		[HivemindIDESettings.HivemindEnabled]: {
+			type: 'boolean',
+			default: true,
+			scope: ConfigurationScope.WINDOW,
+			markdownDescription: localize('hivemindide.hivemind.enabled', "Keep shared AI context for each project in a `.hivemind` folder, so any AI (and any teammate's AI) can pick up where the last one left off. Only trusted workspaces get one."),
+			tags: ['hivemindide']
+		},
+		[HivemindIDESettings.HivemindAgentPointers]: {
+			type: 'boolean',
+			default: true,
+			scope: ConfigurationScope.WINDOW,
+			markdownDescription: localize('hivemindide.hivemind.agentPointers', "Add a short managed block to the project's `AGENTS.md` and `CLAUDE.md` (creating them if missing) so Claude Code, Codex, Cursor and Copilot read `.hivemind` first and record their work there."),
+			tags: ['hivemindide']
+		},
+		[HivemindIDESettings.HivemindAuthor]: {
+			type: 'string',
+			default: '',
+			scope: ConfigurationScope.APPLICATION,
+			description: localize('hivemindide.hivemind.author', "Your name on hivemind nodes, so teammates can tell whose AI did what. Empty uses your account name."),
+			tags: ['hivemindide']
+		},
+		[HivemindIDESettings.HivemindIncludeInChat]: {
+			type: 'boolean',
+			default: true,
+			scope: ConfigurationScope.APPLICATION,
+			description: localize('hivemindide.hivemind.includeInChat', "Give the Chat panel's AI the project notes and the latest hivemind nodes with every message."),
 			tags: ['hivemindide']
 		}
 	}
@@ -102,8 +337,8 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration)
 	.registerDefaultConfigurations([{
 		overrides: {
-			'workbench.colorTheme': 'Catppuccin Macchiato',
-			'workbench.iconTheme': 'catppuccin-macchiato',
+			'workbench.colorTheme': 'Hivemind Dynamic',
+			'workbench.iconTheme': 'vscode-modern-icons',
 			'telemetry.telemetryLevel': 'off',
 			'telemetry.feedback.enabled': false,
 			'telemetry.enableCrashReporter': false,

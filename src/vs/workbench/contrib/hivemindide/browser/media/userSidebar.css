@@ -174,3 +174,11 @@
 .hivemindide-user-section-label:first-child {
 	margin-top: 0;
 }
+
+/* No "User" heading over the sidebar: the rail already says where you are.
+ * Scoped with :has() so only the part currently showing this view is affected;
+ * inactive views are removed from the DOM, so other views keep their titles.
+ * The activity bar tooltip and View menu still use the registered "User" name. */
+.part:has(.hivemindide-user-shell) .composite.title .title-label {
+	visibility: hidden;
+}

@@ -19,9 +19,9 @@ import { ILogService, LogLevel } from '../../log/common/log.js';
 import { IThemeMainService } from './themeMainService.js';
 
 // These default colors match our default themes
-// editor background color (Catppuccin Latte / Macchiato)
-const DEFAULT_BG_LIGHT = '#eff1f5';
-const DEFAULT_BG_DARK = '#24273a';
+// editor background color (Hivemind Light / Hivemind Dynamic)
+const DEFAULT_BG_LIGHT = '#f5f5f3';
+const DEFAULT_BG_DARK = '#0b0b0b';
 const DEFAULT_BG_HC_BLACK = '#000000';
 const DEFAULT_BG_HC_LIGHT = '#FFFFFF';
 

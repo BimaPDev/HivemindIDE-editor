@@ -16,11 +16,20 @@ import '../common/hivemindideConfiguration.js';
 // Registers the Agents sidebar (author+AI spawn tree).
 import './agentTree.contribution.js';
 
+// Review editor opened when a graph node is clicked.
+import './agentDetail.contribution.js';
+
 // Two-layer settings: Cmd+, opens HivemindIDE Settings; button opens VS Code Settings.
 import './hivemindideSettings.contribution.js';
 
+// Hivemind: shared AI memory for each project in .hivemind/.
+import './hivemind/hivemind.contribution.js';
+
 // User sidebar: nested icon rail + content panel (inside the sidebar).
 import './userSidebar.contribution.js';
+
+// Visor accent: lens gradient on accent strokes, for themes that define it.
+import './visor.js';
 
 // Before ChatStatusBarEntry (BlockRestore) so the Copilot status icon never
 // paints on a cold start.

@@ -1,5 +1,5 @@
 /*---------------------------------------------------------------------------------------------
- *  Agent spawn tree — shared types, view IDs, and demo detail payloads.
+ *  Agent spawn tree — shared types and view IDs.
  *
  *  Root node combines author + parent AI + model. Children are sub-agents.
  *  Clicking a node opens AgentDetailEditor (pipeline · meta · activity · diff).
@@ -7,6 +7,12 @@
 
 export const HIVEMINDIDE_VIEWLET_ID = 'workbench.view.hivemindide';
 export const HIVEMINDIDE_AGENT_TREE_VIEW_ID = 'workbench.view.hivemindide.agentTree';
+/** Opens the review for a graph node in the editor (the wide two-column layout). */
+export const HIVEMINDIDE_OPEN_AGENT_NODE_COMMAND = 'hivemindide.agentTree.openNode';
+/** Stops the run behind a review: cancels its chat and marks the node killed. */
+export const HIVEMINDIDE_KILL_AGENT_NODE_COMMAND = 'hivemindide.agentTree.killNode';
+/** Deletes a hivemind node file and removes it from the graph. */
+export const HIVEMINDIDE_DELETE_AGENT_NODE_COMMAND = 'hivemindide.agentTree.deleteNode';
 
 export type AgentNodeKind = 'root' | 'agent';
 export type AgentNodeStatus = 'active' | 'idle' | 'done';
@@ -43,6 +49,8 @@ export interface IAgentTreeNode {
 	/** Short model name only (sonnet-4, gpt-5). Never a provider URL. */
 	readonly model: string | null;
 	readonly status: AgentNodeStatus;
+	/** The model call for this node is in flight. The card says "running" only then. */
+	readonly running?: boolean;
 	readonly children: readonly IAgentTreeNode[];
 }
 
@@ -56,14 +64,16 @@ export interface IAgentDetailMeta {
 	readonly createdBy: string;
 	readonly paidBy?: string;
 	readonly model: string;
-	readonly permission: string;
-	readonly base: string;
+	readonly permission?: string;
+	readonly base?: string;
 	readonly worktree: string;
 	readonly changes: string;
 }
 
 export interface IAgentActivityItem {
 	readonly kind: 'subagent' | 'note';
+	/** Bold line above the body. Sub-agent rows use "Subagent" when this is omitted. */
+	readonly title?: string;
 	readonly text: string;
 }
 
@@ -89,9 +99,20 @@ export interface IAgentDetailFooter {
 export interface IAgentDetail {
 	readonly nodeId: string;
 	readonly runId: string;
+	/** Name shown in the review header (the person or sub-agent you clicked). */
 	readonly title: string;
+	/** Editor tab label when it should differ from `title`. */
+	readonly tabLabel?: string;
 	readonly subtitle: string;
 	readonly pipelineStage: AgentPipelineStage;
+	/** The run was stopped from the review. The rail says Killed and Kill is hidden. */
+	readonly killed?: boolean;
+	/** Show Kill. Real hivemind nodes that are still active or paused. */
+	readonly canKill?: boolean;
+	/** Show Delete. Real hivemind nodes, including ones already killed or done. */
+	readonly canDelete?: boolean;
+	/** The model is generating for this node right now. */
+	readonly running?: boolean;
 	readonly meta: IAgentDetailMeta;
 	readonly activity: readonly IAgentActivityItem[];
 	/** Direct children this agent spawned — for nested drill-down in the detail pane. */
@@ -114,80 +135,13 @@ export interface IAgentSpawnedChild {
 	readonly childCount: number;
 }
 
-/** Demo trees shown until coordinationd emits agent.* frames. */
-export function createDemoTrees(): IAgentTree[] {
-	return [
-		{
-			run_id: 'run-demo-1',
-			root: {
-				id: 'run-root',
-				kind: 'root',
-				author: 'Bima',
-				label: 'Hivemind',
-				model: 'sonnet-4',
-				status: 'active',
-				children: [
-					{ id: 'a1', kind: 'agent', author: 'Bima', label: 'Explore', model: 'haiku', status: 'active', children: [] },
-					{
-						id: 'a2', kind: 'agent', author: 'Bima', label: 'Edit', model: 'sonnet-4', status: 'idle', children: [
-							{
-								id: 'a2a', kind: 'agent', author: 'Bima', label: 'Tests', model: 'haiku', status: 'active', children: [
-									{ id: 'a2a1', kind: 'agent', author: 'Bima', label: 'Fix flake', model: 'haiku', status: 'active', children: [] },
-								]
-							},
-						]
-					},
-					{ id: 'a3', kind: 'agent', author: 'Bima', label: 'Review', model: 'opus', status: 'done', children: [] },
-				],
-			},
-		},
-		{
-			run_id: 'run-demo-2',
-			root: {
-				id: 'run-root',
-				kind: 'root',
-				author: 'Dani',
-				label: 'Hivemind',
-				model: 'gpt-5',
-				status: 'active',
-				children: [
-					{ id: 'b1', kind: 'agent', author: 'Dani', label: 'Search', model: 'kimi-k2', status: 'active', children: [] },
-					{ id: 'b2', kind: 'agent', author: 'Dani', label: 'Patch', model: 'gpt-5', status: 'active', children: [] },
-				],
-			},
-		},
-		{
-			run_id: 'run-demo-3',
-			root: {
-				id: 'run-root',
-				kind: 'root',
-				author: 'Bima',
-				label: 'Hivemind',
-				model: 'sonnet-4',
-				status: 'active',
-				children: [
-					// Shared IDE: Dani's sub-agent can appear under a run Bima started
-					// only if policy allows — demo shows both owners on the tree.
-					{ id: 'c1', kind: 'agent', author: 'Bima', label: 'Docs', model: 'haiku', status: 'idle', children: [] },
-					{ id: 'c2', kind: 'agent', author: 'Dani', label: 'Lint', model: 'haiku', status: 'active', children: [] },
-				],
-			},
-		},
-	];
-}
-
-/** Resolve a detail page for a clicked tree node (demo + live fallback). */
+/** Resolve a detail page for a clicked tree node. */
 export function resolveAgentDetail(tree: IAgentTree, nodeId: string): IAgentDetail | undefined {
 	const node = findNode(tree.root, nodeId);
 	if (!node) {
 		return undefined;
 	}
-	const spawned = toSpawned(node);
-	const demo = DEMO_DETAILS[`${tree.run_id}:${nodeId}`] ?? DEMO_DETAILS[nodeId];
-	if (demo) {
-		return { ...demo, nodeId, runId: tree.run_id, spawned };
-	}
-	return buildFallbackDetail(tree, node, spawned);
+	return buildFallbackDetail(tree, node, toSpawned(node));
 }
 
 function toSpawned(node: IAgentTreeNode): IAgentSpawnedChild[] {
@@ -230,10 +184,12 @@ function buildFallbackDetail(tree: IAgentTree, node: IAgentTreeNode, spawned: re
 		nodeId: node.id,
 		runId: tree.run_id,
 		title: isRoot ? author : node.label,
+		tabLabel: node.label,
 		subtitle: isRoot
-			? `${node.label}'s AI · model ${model}`
-			: `${author}'s AI · ${node.label} · model ${model}`,
-		pipelineStage: node.status === 'done' ? 'checking' : node.status === 'idle' ? 'provisioning' : 'running',
+			? 'Spawned from the composer.'
+			: `Spawned from ${tree.root.author}'s ${tree.root.label}.`,
+		pipelineStage: node.status === 'done' ? 'checking' : node.status === 'idle' && !node.running ? 'provisioning' : 'running',
+		running: node.running,
 		meta: {
 			from: isRoot ? 'the composer' : tree.root.label,
 			createdBy: author,
@@ -243,10 +199,7 @@ function buildFallbackDetail(tree: IAgentTree, node: IAgentTreeNode, spawned: re
 			worktree: isRoot ? 'parent' : `child/${node.label.toLowerCase()}`,
 			changes: '—',
 		},
-		activity: node.children.map(c => ({
-			kind: 'subagent' as const,
-			text: `${c.author}'s ${c.label}${c.model ? ` · ${c.model}` : ''} · ${c.status}`,
-		})),
+		activity: [],
 		spawned,
 		checks: [],
 		footers: [
@@ -256,238 +209,66 @@ function buildFallbackDetail(tree: IAgentTree, node: IAgentTreeNode, spawned: re
 	};
 }
 
-const DEMO_DETAILS: Record<string, Omit<IAgentDetail, 'nodeId' | 'runId' | 'spawned'>> = {
-	'run-root': {
-		title: 'Bima',
-		subtitle: 'Spawned from the composer, pinned to rev 47.',
-		pipelineStage: 'requested',
+/** Review page for a `.hivemind` node opened from the graph. */
+export interface IHivemindReviewSource {
+	readonly id: string;
+	readonly title: string;
+	readonly author: string;
+	readonly agent: string;
+	readonly model: string | null;
+	readonly status: AgentNodeStatus;
+	readonly goal: string;
+	readonly handoff: string;
+	readonly files: readonly string[];
+	readonly killed?: boolean;
+	readonly running?: boolean;
+	readonly parentTitle?: string;
+	readonly log: readonly { readonly title: string; readonly text: string }[];
+	readonly spawned: readonly IAgentSpawnedChild[];
+}
+
+export function detailFromHivemind(source: IHivemindReviewSource): IAgentDetail {
+	const model = source.model ?? source.agent;
+	const fileCount = source.files.length;
+	const activity: IAgentActivityItem[] = [];
+	if (source.handoff) {
+		activity.push({ kind: 'note', title: 'Handoff', text: source.handoff });
+	}
+	if (source.goal) {
+		activity.push({ kind: 'note', title: 'Goal', text: source.goal });
+	}
+	for (const entry of source.log) {
+		activity.push({ kind: 'note', title: entry.title, text: entry.text });
+	}
+	return {
+		nodeId: source.id,
+		runId: 'hivemind',
+		title: source.author,
+		tabLabel: source.title,
+		subtitle: source.parentTitle
+			? `Spawned from ${source.parentTitle}.`
+			: `Recorded by ${source.agent}.`,
+		pipelineStage: source.status === 'done' ? 'checking' : 'running',
+		killed: source.killed,
+		running: source.running,
+		canKill: !source.killed && source.status !== 'done',
+		canDelete: true,
 		meta: {
-			from: 'the composer',
-			createdBy: 'Bima',
-			paidBy: "Bima's subscription",
-			model: 'sonnet-4',
-			permission: 'Request (inherited)',
-			base: 'rev 47',
-			worktree: 'child/asd',
-			changes: '+74 −5',
+			from: source.parentTitle ?? source.agent,
+			createdBy: source.author,
+			model,
+			worktree: `nodes/${source.id}`,
+			changes: fileCount === 0 ? '—' : fileCount === 1 ? '1 file' : `${fileCount} files`,
 		},
-		activity: [
-			{ kind: 'subagent', text: 'Cloned the parent into an isolated worktree. Reading the target range and its call sites.' },
-			{ kind: 'subagent', text: 'Wrote the change in the sandbox and ran it once locally.' },
-			{ kind: 'subagent', text: 'Finished with a reviewable diff. Nothing was applied to the parent.' },
-		],
-		checksPinnedBy: 'Owner',
-		checks: [
-			{ command: 'npm run typecheck', status: 'pending' },
-			{ command: 'npm test -- tests/lobby', status: 'pending' },
-		],
-		diff: {
-			summary: '+74 −5 · rev 47',
-			file: {
-				path: 'tests/lobby/expired_ticket.test.ts',
-				lines: [
-					{ type: 'add', text: "import { joinLobby } from '../../src/lobby';" },
-					{ type: 'add', text: "import { fakeClock } from '../helpers/clock';" },
-					{ type: 'add', text: "import { lobbyFixture } from '../helpers/lobby';" },
-					{ type: 'ctx', text: '' },
-					{ type: 'add', text: "test('an expired ticket cannot rejoin a dead lobby', async () => {" },
-					{ type: 'add', text: "  fakeClock.set('2026-03-01T12:00:00Z');" },
-					{ type: 'add', text: '  const lobby = lobbyFixture.dead();' },
-					{ type: 'add', text: "  const refusal = await joinLobby(lobby, { ticket: 't_expired' });" },
-					{ type: 'add', text: "  expect(refusal).toBe('ticket_expired');" },
-					{ type: 'add', text: '});' },
-				],
-			},
-		},
-		footers: [
-			{ text: 'waiting for a human to review' },
-			{ text: 'parent workspace unchanged' },
-		],
-	},
-	'a1': {
-		title: 'Explore',
-		subtitle: 'Sub-agent of Hivemind · reading call sites before edit.',
-		pipelineStage: 'running',
-		meta: {
-			from: 'Hivemind',
-			createdBy: 'Bima',
-			model: 'haiku',
-			permission: 'Request (inherited)',
-			base: 'rev 47',
-			worktree: 'child/explore',
-			changes: '+0 −0',
-		},
-		activity: [
-			{ kind: 'subagent', text: 'Mapped imports of the target symbol across src/ and tests/.' },
-			{ kind: 'subagent', text: 'Queued findings for the Edit sub-agent.' },
-		],
+		activity,
+		spawned: source.spawned,
 		checks: [],
 		footers: [
-			{ text: 'gathering context' },
+			{ text: source.killed ? 'killed' : source.running ? 'running' : source.status === 'done' ? 'waiting for a human to review' : 'not running' },
 			{ text: 'parent workspace unchanged' },
 		],
-	},
-	'a2': {
-		title: 'Edit',
-		subtitle: 'Sub-agent of Hivemind · writing the change in the sandbox.',
-		pipelineStage: 'provisioning',
-		meta: {
-			from: 'Hivemind',
-			createdBy: 'Bima',
-			model: 'sonnet-4',
-			permission: 'Request (inherited)',
-			base: 'rev 47',
-			worktree: 'child/edit',
-			changes: '+74 −5',
-		},
-		activity: [
-			{ kind: 'subagent', text: 'Applied the patch in the isolated worktree.' },
-			{ kind: 'subagent', text: 'Spawned Tests to verify the lobby ticket expiry path.' },
-		],
-		checksPinnedBy: 'Owner',
-		checks: [
-			{ command: 'npm run typecheck', status: 'pending' },
-		],
-		diff: {
-			summary: '+74 −5 · rev 47',
-			file: {
-				path: 'tests/lobby/expired_ticket.test.ts',
-				lines: [
-					{ type: 'add', text: "test('an expired ticket cannot rejoin a dead lobby', async () => {" },
-					{ type: 'add', text: "  expect(refusal).toBe('ticket_expired');" },
-					{ type: 'add', text: '});' },
-				],
-			},
-		},
-		footers: [
-			{ text: 'waiting for tests' },
-			{ text: 'parent workspace unchanged' },
-		],
-	},
-	'a2a': {
-		title: 'Tests',
-		subtitle: 'Sub-agent of Edit · running the lobby suite.',
-		pipelineStage: 'checking',
-		meta: {
-			from: 'Edit',
-			createdBy: 'Bima',
-			model: 'haiku',
-			permission: 'Request (inherited)',
-			base: 'rev 47',
-			worktree: 'child/edit',
-			changes: '+74 −5',
-		},
-		activity: [
-			{ kind: 'subagent', text: 'Scheduled npm test -- tests/lobby in the sandbox.' },
-			{ kind: 'subagent', text: 'Spawned Fix flake after a timing failure in expired_ticket.' },
-		],
-		checksPinnedBy: 'Owner',
-		checks: [
-			{ command: 'npm test -- tests/lobby', status: 'pending' },
-		],
-		footers: [
-			{ text: 'checks running' },
-			{ text: 'parent workspace unchanged' },
-		],
-	},
-	'a2a1': {
-		title: 'Fix flake',
-		subtitle: 'Sub-agent of Tests · stabilizing the expiry assertion.',
-		pipelineStage: 'running',
-		meta: {
-			from: 'Tests',
-			createdBy: 'Bima',
-			model: 'haiku',
-			permission: 'Request (inherited)',
-			base: 'rev 47',
-			worktree: 'child/edit',
-			changes: '+3 −1',
-		},
-		activity: [
-			{ kind: 'subagent', text: 'Rewrote the fakeClock setup so the ticket expires before joinLobby.' },
-		],
-		checks: [
-			{ command: 'npm test -- tests/lobby/expired_ticket.test.ts', status: 'pending' },
-		],
-		footers: [
-			{ text: 'nested sub-agent' },
-			{ text: 'parent workspace unchanged' },
-		],
-	},
-	'a3': {
-		title: 'Review',
-		subtitle: 'Sub-agent of Hivemind · finished review, awaiting human.',
-		pipelineStage: 'checking',
-		meta: {
-			from: 'Hivemind',
-			createdBy: 'Bima',
-			model: 'opus',
-			permission: 'Request (inherited)',
-			base: 'rev 47',
-			worktree: 'child/review',
-			changes: '+74 −5',
-		},
-		activity: [
-			{ kind: 'subagent', text: 'Reviewed the candidate diff against the ticket-expiry contract.' },
-			{ kind: 'subagent', text: 'No apply to parent — left for human review.' },
-		],
-		checks: [
-			{ command: 'npm run typecheck', status: 'passed' },
-			{ command: 'npm test -- tests/lobby', status: 'pending' },
-		],
-		footers: [
-			{ text: 'waiting for a human to review' },
-			{ text: 'parent workspace unchanged' },
-		],
-	},
-};
-
-// Aliases so demo run-2 / run-3 nodes also open rich pages.
-DEMO_DETAILS['run-demo-1:run-root'] = DEMO_DETAILS['run-root'];
-DEMO_DETAILS['run-demo-2:run-root'] = {
-	...DEMO_DETAILS['run-root'],
-	title: 'Dani',
-	meta: { ...DEMO_DETAILS['run-root'].meta, createdBy: 'Dani', paidBy: "Dani's subscription", model: 'gpt-5' },
-};
-DEMO_DETAILS['b1'] = {
-	...DEMO_DETAILS['a1'],
-	title: 'Search',
-	meta: { ...DEMO_DETAILS['a1'].meta, model: 'kimi-k2', worktree: 'child/search', createdBy: 'Dani' },
-};
-DEMO_DETAILS['b2'] = {
-	...DEMO_DETAILS['a2'],
-	title: 'Patch',
-	meta: { ...DEMO_DETAILS['a2'].meta, model: 'gpt-5', worktree: 'child/patch', createdBy: 'Dani' },
-};
-DEMO_DETAILS['c1'] = {
-	...DEMO_DETAILS['a1'],
-	title: 'Docs',
-	pipelineStage: 'provisioning',
-	meta: { ...DEMO_DETAILS['a1'].meta, model: 'haiku', worktree: 'child/docs', createdBy: 'Bima' },
-};
-DEMO_DETAILS['c2'] = {
-	title: 'Lint',
-	subtitle: "Dani's AI · nested under Bima's run in the shared IDE.",
-	pipelineStage: 'running',
-	meta: {
-		from: 'Hivemind',
-		createdBy: 'Dani',
-		model: 'haiku',
-		permission: 'Request (inherited)',
-		base: 'rev 47',
-		worktree: 'child/lint',
-		changes: '+2 −0',
-	},
-	activity: [
-		{ kind: 'subagent', text: "Running Dani's lint pass on the shared worktree." },
-	],
-	checks: [],
-	footers: [
-		{ text: "Dani's AI" },
-		{ text: 'parent workspace unchanged' },
-	],
-};
-
+	};
+}
 
 export function isAgentTree(value: unknown): value is IAgentTree {
 	if (!value || typeof value !== 'object') {

@@ -12,6 +12,8 @@ import { EditorInputCapabilities, IUntypedEditorInput } from '../../../common/ed
 import { EditorInput } from '../../../common/editor/editorInput.js';
 import { IAgentDetail } from '../common/agentTree.js';
 
+export const AGENT_DETAIL_EDITOR_ID = 'workbench.editor.hivemindideAgentDetail';
+
 const agentDetailIcon = registerIcon(
 	'hivemindide-agent-detail-editor-label-icon',
 	Codicon.organization,
@@ -24,12 +26,19 @@ export class AgentDetailInput extends EditorInput {
 
 	readonly resource: URI;
 
-	constructor(readonly detail: IAgentDetail) {
+	detail: IAgentDetail;
+
+	constructor(detail: IAgentDetail) {
 		super();
+		this.detail = detail;
 		this.resource = URI.from({
 			scheme: Schemas.vscodeSettings,
 			path: `hivemindide-agent/${detail.runId}/${detail.nodeId}`,
 		});
+	}
+
+	replaceDetail(detail: IAgentDetail): void {
+		this.detail = detail;
 	}
 
 	override get typeId(): string {
@@ -37,11 +46,11 @@ export class AgentDetailInput extends EditorInput {
 	}
 
 	override get editorId(): string | undefined {
-		return this.typeId;
+		return AGENT_DETAIL_EDITOR_ID;
 	}
 
 	override getName(): string {
-		return this.detail.title;
+		return this.detail.tabLabel ?? this.detail.title;
 	}
 
 	override getDescription(): string | undefined {

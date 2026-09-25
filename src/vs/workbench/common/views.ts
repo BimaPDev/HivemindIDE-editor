@@ -127,6 +127,13 @@ export interface IViewContainerDescriptor {
 	readonly hideIfEmpty?: boolean;
 
 	/**
+	 * HivemindIDE: never give this container an activity bar entry, even while it
+	 * is open. For containers reached another way (the User panel opens from the
+	 * Manage gear).
+	 */
+	readonly hideFromActivityBar?: boolean;
+
+	/**
 	 * Id of the extension that contributed the view container
 	 */
 	readonly extensionId?: ExtensionIdentifier;

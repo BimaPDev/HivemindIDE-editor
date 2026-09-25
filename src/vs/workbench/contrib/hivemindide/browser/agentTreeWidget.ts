@@ -3,13 +3,22 @@
  *--------------------------------------------------------------------------------------------*/
 
 import './media/agentDetail.css';
-import { $, append, clearNode, addDisposableListener, EventType } from '../../../../base/browser/dom.js';
+import { $, append, clearNode, addDisposableListener, EventType, getWindow } from '../../../../base/browser/dom.js';
+import { Codicon } from '../../../../base/common/codicons.js';
+import { ThemeIcon } from '../../../../base/common/themables.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { Disposable, DisposableStore } from '../../../../base/common/lifecycle.js';
 import { IAgentDetail, IAgentTree, IAgentTreeNode } from '../common/agentTree.js';
 import { AgentDetailWidget } from './agentDetailWidget.js';
 
-export type AgentTreeConnectionState = 'demo' | 'live' | 'connecting' | 'error' | 'empty';
+export type AgentTreeConnectionState = 'live' | 'connecting' | 'error' | 'empty';
+
+/** More siblings than this are stacked in a column; a row of them would not fit a sidebar. */
+const MAX_SIBLINGS_IN_ROW = 3;
+const MIN_ZOOM = 0.35;
+const MAX_ZOOM = 1.5;
+/** Vertical offset of a stacked card's connector, roughly the middle of its first line. */
+const STACK_STUB_Y = 27;
 
 export class AgentTreeWidget extends Disposable {
 
@@ -21,6 +30,10 @@ export class AgentTreeWidget extends Disposable {
 	private readonly detailWidget: AgentDetailWidget;
 	private readonly renderStore = this._register(new DisposableStore());
 	private showingDetail = false;
+	private readonly zoomLabel: HTMLElement;
+	private zoom = 1;
+	/** Fit the graph to the pane width until the user zooms by hand. */
+	private autoFit = true;
 
 	private readonly _onDidOpenNode = this._register(new Emitter<string>());
 	readonly onDidOpenNode: Event<string> = this._onDidOpenNode.event;
@@ -32,6 +45,8 @@ export class AgentTreeWidget extends Disposable {
 		this.treePane = append(this.root, $('.hivemindide-agent-tree-pane'));
 		this.scrollEl = append(this.treePane, $('.hivemindide-agent-tree-scroll'));
 		this.hostEl = append(this.scrollEl, $('.hivemindide-agent-tree-host'));
+		this.zoomLabel = this.createZoomControls();
+		this.registerPanAndZoomGestures();
 		this.detailWidget = this._register(new AgentDetailWidget(this.root));
 		this._register(this.detailWidget.onDidBack(() => this.showTree()));
 		this._register(this.detailWidget.onDidOpenChild(id => this._onDidOpenNode.fire(id)));
@@ -44,12 +59,8 @@ export class AgentTreeWidget extends Disposable {
 				this.statusEl.classList.add('live');
 				this.statusEl.textContent = detail ?? 'Live · coordination stream';
 				break;
-			case 'demo':
-				this.statusEl.classList.add('demo');
-				this.statusEl.textContent = detail ?? 'Demo run · waiting for agent.spawned';
-				break;
 			case 'connecting':
-				this.statusEl.classList.add('demo');
+				this.statusEl.classList.add('muted');
 				this.statusEl.textContent = detail ?? 'Connecting…';
 				break;
 			case 'error':
@@ -57,13 +68,13 @@ export class AgentTreeWidget extends Disposable {
 				this.statusEl.textContent = detail ?? 'Stream unavailable';
 				break;
 			case 'empty':
-				this.statusEl.classList.add('demo');
+				this.statusEl.classList.add('muted');
 				this.statusEl.textContent = detail ?? 'No active agent run';
 				break;
 		}
 	}
 
-	render(tree: IAgentTree | undefined): void {
+	render(tree: IAgentTree | undefined, emptyMessage = 'No agent run to show.'): void {
 		if (this.showingDetail) {
 			// Keep detail visible; tree host still updates underneath.
 		} else {
@@ -73,10 +84,16 @@ export class AgentTreeWidget extends Disposable {
 		clearNode(this.hostEl);
 		if (!tree) {
 			const empty = append(this.hostEl, $('.hivemindide-agent-tree-empty'));
-			empty.textContent = 'No agent run to show.';
+			empty.textContent = emptyMessage;
 			return;
 		}
 		this.hostEl.appendChild(this.buildBranch(tree.root));
+		// Connector bars are measured after layout; fit after they are placed.
+		getWindow(this.hostEl).requestAnimationFrame(() => {
+			if (this.autoFit) {
+				this.fit();
+			}
+		});
 	}
 
 	showDetail(detail: IAgentDetail): void {
@@ -94,7 +111,79 @@ export class AgentTreeWidget extends Disposable {
 	}
 
 	layout(_height: number, _width: number): void {
-		// Scroll containers fill the pane.
+		if (this.autoFit) {
+			this.fit();
+		}
+	}
+
+	// ---- Zoom and pan --------------------------------------------------------------------
+
+	private createZoomControls(): HTMLElement {
+		const tools = append(this.treePane, $('.hivemindide-agent-tree-tools'));
+		const button = (icon: ThemeIcon | undefined, text: string, title: string, run: () => void) => {
+			const el = append(tools, $('button.hivemindide-agent-tree-tool')) as HTMLButtonElement;
+			el.type = 'button';
+			el.title = title;
+			el.setAttribute('aria-label', title);
+			if (icon) {
+				append(el, $('span')).classList.add(...ThemeIcon.asClassNameArray(icon));
+			} else {
+				el.textContent = text;
+			}
+			this._register(addDisposableListener(el, EventType.CLICK, run));
+			return el;
+		};
+		button(Codicon.zoomOut, '', 'Zoom out', () => this.setZoom(this.zoom / 1.2, false));
+		const label = button(undefined, '100%', 'Fit to width', () => this.fit());
+		button(Codicon.zoomIn, '', 'Zoom in', () => this.setZoom(this.zoom * 1.2, false));
+		return label;
+	}
+
+	private registerPanAndZoomGestures(): void {
+		// Drag the background to pan; cards stay clickable.
+		this._register(addDisposableListener(this.scrollEl, EventType.MOUSE_DOWN, (e: MouseEvent) => {
+			if (e.button !== 0 || (e.target as HTMLElement).closest('.hivemindide-agent-card, .hivemindide-agent-tree-tools')) {
+				return;
+			}
+			e.preventDefault();
+			const start = { x: e.clientX, y: e.clientY, left: this.scrollEl.scrollLeft, top: this.scrollEl.scrollTop };
+			this.scrollEl.classList.add('panning');
+			const move = addDisposableListener(getWindow(this.scrollEl), EventType.MOUSE_MOVE, (m: MouseEvent) => {
+				this.scrollEl.scrollLeft = start.left - (m.clientX - start.x);
+				this.scrollEl.scrollTop = start.top - (m.clientY - start.y);
+			});
+			const up = addDisposableListener(getWindow(this.scrollEl), EventType.MOUSE_UP, () => {
+				this.scrollEl.classList.remove('panning');
+				move.dispose();
+				up.dispose();
+			});
+		}));
+		// Cmd/Ctrl + wheel (and trackpad pinch, which arrives as ctrl+wheel) zooms.
+		this._register(addDisposableListener(this.scrollEl, EventType.MOUSE_WHEEL, (e: WheelEvent) => {
+			if (!e.ctrlKey && !e.metaKey) {
+				return;
+			}
+			e.preventDefault();
+			this.setZoom(this.zoom * Math.exp(-e.deltaY * 0.01), false);
+		}, { passive: false }));
+	}
+
+	/** Zooms so the whole graph fits the pane width (never above 100%). */
+	private fit(): void {
+		this.autoFit = true;
+		this.hostEl.style.zoom = '1';
+		const natural = this.hostEl.scrollWidth;
+		const available = this.scrollEl.clientWidth - 24;
+		this.setZoom(natural > 0 && available > 0 ? Math.min(1, available / natural) : 1, true);
+	}
+
+	private setZoom(zoom: number, auto: boolean): void {
+		this.autoFit = auto;
+		this.zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
+		// CSS zoom (unlike transform) changes layout size, so the scroll area stays right.
+		this.hostEl.style.zoom = String(this.zoom);
+		this.zoomLabel.textContent = `${Math.round(this.zoom * 100)}%`;
+		this.zoomLabel.title = auto ? 'Fitted to width' : 'Fit to width';
 	}
 
 	private buildBranch(node: IAgentTreeNode): HTMLElement {
@@ -111,16 +200,20 @@ export class AgentTreeWidget extends Disposable {
 		append(branch, $('.hivemindide-agent-edge'));
 
 		const row = append(branch, $('.hivemindide-agent-children'));
+		row.classList.toggle('stacked', kids.length > MAX_SIBLINGS_IN_ROW);
 		for (const child of kids) {
 			row.appendChild(this.buildBranch(child));
 		}
 
-		requestAnimationFrame(() => this.trimChildBar(row));
+		getWindow(this.hostEl).requestAnimationFrame(() => this.trimChildBar(row));
 		return branch;
 	}
 
 	private buildCard(node: IAgentTreeNode): HTMLElement {
 		const card = $(`.hivemindide-agent-card.${node.kind}`);
+		if (node.running) {
+			card.classList.add('running');
+		}
 		card.tabIndex = 0;
 		card.setAttribute('role', 'button');
 		card.title = 'Open agent detail';
@@ -150,30 +243,41 @@ export class AgentTreeWidget extends Disposable {
 
 		if (node.model) {
 			const model = append(card, $('.hivemindide-agent-model'));
+			model.title = node.model; // the card truncates long model file names
 			model.appendChild(document.createTextNode('model '));
 			const strong = append(model, $('strong'));
 			strong.textContent = node.model;
 		}
 
 		const meta = append(card, $('.hivemindide-agent-meta'));
-		const status = append(meta, $(`.hivemindide-agent-pill.${node.status}`));
-		status.textContent = node.status;
+		const running = !!node.running;
+		const shown = running ? 'running' : node.status === 'active' ? 'idle' : node.status;
+		const status = append(meta, $(`.hivemindide-agent-pill.${running ? 'running' : shown}`));
+		status.textContent = shown;
 
 		return card;
 	}
 
+	/**
+	 * Sizes the connector bar over a row of siblings (or the rail beside a
+	 * stack). Uses layout offsets, not client rects, so zoom does not skew it.
+	 */
 	private trimChildBar(row: HTMLElement): void {
 		const branches = Array.from(row.children) as HTMLElement[];
+		if (row.classList.contains('stacked')) {
+			const last = branches[branches.length - 1];
+			row.style.setProperty('--hivemindide-spine', `${last.offsetTop + STACK_STUB_Y}px`);
+			return;
+		}
 		if (branches.length < 2) {
 			row.style.setProperty('--hivemindide-bar-left', '50%');
 			row.style.setProperty('--hivemindide-bar-right', '50%');
 			return;
 		}
-		const rowRect = row.getBoundingClientRect();
-		const first = branches[0].getBoundingClientRect();
-		const last = branches[branches.length - 1].getBoundingClientRect();
-		const left = first.left + first.width / 2 - rowRect.left;
-		const right = rowRect.right - (last.left + last.width / 2);
+		const first = branches[0];
+		const last = branches[branches.length - 1];
+		const left = first.offsetLeft + first.offsetWidth / 2;
+		const right = row.clientWidth - (last.offsetLeft + last.offsetWidth / 2);
 		row.style.setProperty('--hivemindide-bar-left', `${left}px`);
 		row.style.setProperty('--hivemindide-bar-right', `${right}px`);
 	}

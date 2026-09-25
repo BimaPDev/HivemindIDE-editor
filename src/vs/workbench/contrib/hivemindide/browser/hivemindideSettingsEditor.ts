@@ -13,6 +13,8 @@ import { localize } from '../../../../nls.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { IContextViewService } from '../../../../platform/contextview/browser/contextView.js';
+import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
+import { HivemindIDESettingsSections, SELF_RENDERING_CONFIG_PREFIX } from './hivemindideSettingsSections.js';
 import { IEditorOptions } from '../../../../platform/editor/common/editor.js';
 import { IStorageService } from '../../../../platform/storage/common/storage.js';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
@@ -96,12 +98,15 @@ const SECTIONS: readonly ISettingsSection[] = [
 				label: localize('hivemindide.settings.agents.repoId', "Repo ID"),
 				description: localize('hivemindide.agentTree.repoId', "Repo ID passed to coordinationd for the agent tree stream. Use the seeded demo id, or your own."),
 			},
-			{
-				kind: 'boolean',
-				key: HivemindIDESettings.AgentTreeDemoMode,
-				label: localize('hivemindide.settings.agents.demo', "Demo mode"),
-				description: localize('hivemindide.agentTree.demoMode', "Show a mock author+AI spawn tree when coordinationd has not yet emitted agent.* frames. Live frames always win."),
-			},
+		],
+	},
+	{
+		title: localize('hivemindide.settings.section.hivemind', "Hivemind"),
+		rows: [
+			{ kind: 'boolean', key: HivemindIDESettings.HivemindEnabled, label: localize('hivemindide.settings.hivemind.enabled', "Keep a .hivemind folder in each project"), description: localize('hivemindide.settings.hivemind.enabledDesc', "Shared memory any AI (and any teammate's AI) reads before starting and writes to when it stops, so work picks up where it left off. Only trusted workspaces get one.") },
+			{ kind: 'boolean', key: HivemindIDESettings.HivemindAgentPointers, label: localize('hivemindide.settings.hivemind.pointers', "Point other AIs to it"), description: localize('hivemindide.settings.hivemind.pointersDesc', "Add a short managed block to AGENTS.md and CLAUDE.md so Claude Code, Codex, Cursor and Copilot use .hivemind too.") },
+			{ kind: 'boolean', key: HivemindIDESettings.HivemindIncludeInChat, label: localize('hivemindide.settings.hivemind.chat', "Give the chat AI recent hivemind work"), description: localize('hivemindide.settings.hivemind.chatDesc', "Include the project notes and the latest nodes with every chat message.") },
+			{ kind: 'string', key: HivemindIDESettings.HivemindAuthor, label: localize('hivemindide.settings.hivemind.author', "Your name on nodes"), description: localize('hivemindide.settings.hivemind.authorDesc', "So teammates can tell whose AI did what. Empty uses your account name.") },
 		],
 	},
 ];
@@ -121,6 +126,7 @@ export class HivemindIDESettingsEditor extends EditorPane {
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ICommandService private readonly commandService: ICommandService,
 		@IContextViewService private readonly contextViewService: IContextViewService,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
 	) {
 		super(HivemindIDESettingsEditor.ID, group, telemetryService, themeService, storageService);
 	}
@@ -191,6 +197,9 @@ export class HivemindIDESettingsEditor extends EditorPane {
 		for (const section of SECTIONS) {
 			this.renderSection(inner, section, store);
 		}
+		for (const section of HivemindIDESettingsSections.sections) {
+			store.add(this.instantiationService.createInstance(section.ctor)).render(append(inner, $('.hivemindide-settings-section')));
+		}
 
 		const footer = append(inner, $('.hivemindide-settings-footer'));
 		const footerBtn = store.add(new Button(footer, { ...defaultButtonStyles, secondary: true }));
@@ -200,7 +209,7 @@ export class HivemindIDESettingsEditor extends EditorPane {
 		}));
 
 		store.add(this.configurationService.onDidChangeConfiguration(e => {
-			if (e.affectsConfiguration(HIVEMINDIDE_CONFIG_SECTION)) {
+			if (e.affectsConfiguration(HIVEMINDIDE_CONFIG_SECTION) && !e.affectsConfiguration(SELF_RENDERING_CONFIG_PREFIX)) {
 				this.render();
 			}
 		}));
