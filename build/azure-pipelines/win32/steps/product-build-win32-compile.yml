@@ -337,7 +337,7 @@ steps:
     - powershell: |
         . build/azure-pipelines/win32/exec.ps1
         $ErrorActionPreference = "Stop"
-        exec { npx deemon --detach --wait -- npx zx build/azure-pipelines/win32/codesign.ts }
+        exec { npx deemon --detach --wait -- node build/azure-pipelines/win32/codesignBackground.ts }
       env:
         SYSTEM_ACCESSTOKEN: $(System.AccessToken)
       displayName: ✍️ Codesign
@@ -354,7 +354,24 @@ steps:
     - powershell: |
         . build/azure-pipelines/win32/exec.ps1
         $ErrorActionPreference = "Stop"
-        exec { npx deemon --attach -- npx zx build/azure-pipelines/win32/codesign.ts }
+        $CodesignResultPath = ".build\logs\codesign\win32-$(VSCODE_ARCH)\result.json"
+        $CodesignLogPath = ".build\logs\codesign\win32-$(VSCODE_ARCH)\codesign.log"
+        try {
+          exec { npx deemon --attach -- node build/azure-pipelines/win32/codesignBackground.ts }
+        } catch {
+          if (Test-Path $CodesignLogPath) {
+            Get-Content -Path $CodesignLogPath
+          }
+          if (-not (Test-Path $CodesignResultPath)) {
+            throw
+          }
+          $CodesignResult = Get-Content -Raw -Path $CodesignResultPath | ConvertFrom-Json
+          if ($CodesignResult.exitCode -ne 0) {
+            $CodesignSignal = if ($null -eq $CodesignResult.signal) { "none" } else { $CodesignResult.signal }
+            throw "Codesign failed with exit code $($CodesignResult.exitCode) and signal $CodesignSignal."
+          }
+          Write-Host "Codesign completed successfully before its background daemon exited."
+        }
       condition: succeededOrFailed()
       displayName: "✍️ Post-job: Codesign"
 
